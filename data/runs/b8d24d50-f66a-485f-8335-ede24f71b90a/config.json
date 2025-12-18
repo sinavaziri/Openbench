@@ -1,0 +1,11 @@
+{
+  "benchmark": "gsm8k",
+  "model": "openai/gpt-4",
+  "limit": 3,
+  "temperature": null,
+  "top_p": null,
+  "max_tokens": null,
+  "timeout": null,
+  "epochs": null,
+  "max_connections": null
+}

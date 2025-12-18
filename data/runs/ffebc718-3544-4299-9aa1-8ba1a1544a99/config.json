@@ -1,0 +1,11 @@
+{
+  "benchmark": "mmlu",
+  "model": "openai/gpt-4-turbo",
+  "limit": 3,
+  "temperature": 0.7,
+  "top_p": null,
+  "max_tokens": 512,
+  "timeout": null,
+  "epochs": null,
+  "max_connections": null
+}

@@ -1,0 +1,11 @@
+Starting mock benchmark run...
+Benchmark: gsm8k
+Model: test/model-api
+Limit: 2
+
+Processing sample 1/2...
+Processing sample 2/2...
+
+Run completed successfully!
+
+RESULTS: {"benchmark": "gsm8k", "model": "test/model-api", "accuracy": 0.85, "total_samples": 2, "completed_samples": 2}

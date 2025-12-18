@@ -1,0 +1,11 @@
+{
+  "benchmark": "mmlu",
+  "model": "openai/gpt-4o",
+  "limit": 5,
+  "temperature": null,
+  "top_p": null,
+  "max_tokens": null,
+  "timeout": null,
+  "epochs": null,
+  "max_connections": null
+}

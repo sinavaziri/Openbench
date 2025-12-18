@@ -1,0 +1,33 @@
+python -c '
+import time
+import json
+import sys
+
+benchmark = "gsm8k"
+model = "openai/gpt-4o"
+limit = 3
+
+print("Starting mock benchmark run...")
+print(f"Benchmark: {benchmark}")
+print(f"Model: {model}")
+print(f"Limit: {limit}")
+print()
+
+for i in range(3):
+    print(f"Processing sample {i+1}/{limit}...")
+    time.sleep(1)
+
+print()
+print("Run completed successfully!")
+print()
+
+# Output mock results
+result = {
+    "benchmark": benchmark,
+    "model": model,
+    "accuracy": 0.85,
+    "total_samples": limit,
+    "completed_samples": limit
+}
+print("RESULTS:", json.dumps(result))
+'

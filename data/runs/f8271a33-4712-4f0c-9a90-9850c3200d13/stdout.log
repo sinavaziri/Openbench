@@ -1,0 +1,5 @@
+Starting mock benchmark run...
+Benchmark: gsm8k
+Model: openai/gpt-4o
+Limit: 3
+

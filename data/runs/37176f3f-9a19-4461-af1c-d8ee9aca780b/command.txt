@@ -1,0 +1,29 @@
+python -c '
+import time
+import json
+import sys
+
+print("Starting mock benchmark run...")
+print(f"Benchmark: hellaswag")
+print(f"Model: anthropic/claude-3")
+print(f"Limit: 5")
+print()
+
+for i in range(5):
+    print(f"Processing sample {i+1}/{config.limit or 10}...")
+    time.sleep(1)
+
+print()
+print("Run completed successfully!")
+print()
+
+# Output mock results
+result = {
+    "benchmark": "hellaswag",
+    "model": "anthropic/claude-3",
+    "accuracy": 0.85,
+    "total_samples": 5,
+    "completed_samples": 5
+}
+print("RESULTS:", json.dumps(result))
+'
