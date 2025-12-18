@@ -7,14 +7,14 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['neue-haas-unica', 'system-ui', 'sans-serif'],
+        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
         mono: ['SF Mono', 'Menlo', 'Monaco', 'Consolas', 'monospace'],
       },
       fontWeight: {
-        normal: '500',
+        normal: '400',
         medium: '500',
-        semibold: '500',
-        bold: '500',
+        semibold: '600',
+        bold: '600',
       },
       colors: {
         background: '#0c0c0c',

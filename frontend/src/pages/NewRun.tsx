@@ -67,14 +67,19 @@ export default function NewRun() {
 
   return (
     <Layout>
+      {/* About Section */}
+      <div className="mb-12">
+        <p className="text-[11px] text-[#666] uppercase tracking-[0.1em] mb-4">
+          About
+        </p>
+        <p className="text-[15px] text-white leading-relaxed max-w-2xl">
+          OpenBench is a benchmarking platform for evaluating AI models. 
+          Monitor runs, compare results, and track performance across different evaluations.
+        </p>
+      </div>
+
       {/* Header */}
       <div className="mb-12">
-        <Link 
-          to="/"
-          className="text-[13px] text-[#666] hover:text-white transition-colors mb-4 inline-block"
-        >
-          ← Back
-        </Link>
         <h1 className="text-[28px] text-white tracking-tight">
           New Benchmark Run
         </h1>
@@ -119,6 +124,7 @@ export default function NewRun() {
         ) : (
           <RunForm
             benchmarks={benchmarks}
+            apiKeys={apiKeys}
             onSubmit={handleSubmit}
             loading={submitting}
             prefill={prefillConfig}

@@ -80,23 +80,52 @@ class BenchmarkCatalog:
         # Parse line-by-line format
         for line in output.strip().split("\n"):
             line = line.strip()
+            
+            # Skip empty lines, comments, and decorative elements
             if not line or line.startswith("#"):
+                continue
+            
+            # Skip box drawing characters and decorative lines
+            # Common box drawing characters: ─ │ ┌ ┐ └ ┘ ├ ┤ ┬ ┴ ┼ ╭ ╮ ╯ ╰ ═ ║ ╔ ╗ ╚ ╝
+            box_chars = {'─', '│', '┌', '┐', '└', '┘', '├', '┤', '┬', '┴', '┼', 
+                        '╭', '╮', '╯', '╰', '═', '║', '╔', '╗', '╚', '╝', '━', '┃',
+                        '┏', '┓', '┗', '┛', '╒', '╓', '╕', '╖', '╘', '╙', '╛', '╜',
+                        '╞', '╟', '╡', '╢', '╤', '╥', '╧', '╨', '╪', '╫', '╬',
+                        '▀', '▄', '█', '▌', '▐', '░', '▒', '▓', '⎯', '⎺', '⎻', '⎼', '⎽',
+                        '•', '●', '○', '◦', '▪', '▫', '■', '□', '▬'}
+            
+            # Skip lines that are mostly box drawing characters or separators
+            stripped = line.replace(' ', '')
+            if not stripped or all(c in box_chars for c in stripped):
+                continue
+            
+            # Skip header lines (e.g., "Available Benchmarks", "Community Benchmarks")
+            if 'benchmark' in line.lower() and line.lower().count('benchmark') >= 1 and not any(c.isalpha() and c.islower() for c in line[:10]):
                 continue
             
             # Handle "- name: description" format
             if line.startswith("- "):
                 line = line[2:]
             
-            # Split by colon for "name: description"
-            if ":" in line:
-                parts = line.split(":", 1)
-                name = parts[0].strip()
-                desc = parts[1].strip() if len(parts) > 1 else ""
-            else:
-                name = line
-                desc = ""
+            # Parse table format: "name    DisplayName    Description"
+            # The benchmark ID is typically the first word
+            parts = line.split(None, 1)  # Split on first whitespace
+            if not parts:
+                continue
             
-            if name:
+            name = parts[0].strip()
+            desc = parts[1].strip() if len(parts) > 1 else ""
+            
+            # Skip if name contains box chars or is suspiciously long
+            if any(c in box_chars for c in name) or len(name) > 50:
+                continue
+            
+            # Skip section headers and continuation lines
+            if name.lower() in ['name', 'benchmark', 'benchmarks', 'subsets)', 'tasks', 'reasoning', 'community']:
+                continue
+            
+            # Basic validation: benchmark names should be lowercase, alphanumeric with hyphens/underscores
+            if name and (name.islower() or '_' in name or '-' in name) and not name.endswith('...'):
                 benchmarks.append(Benchmark(
                     name=name,
                     category="general",
@@ -121,8 +150,18 @@ class BenchmarkCatalog:
                 text=True,
                 timeout=30,
             )
-            if result.returncode == 0:
-                return self._parse_bench_list_output(result.stdout)
+            if result.returncode == 0 and result.stdout.strip():
+                parsed = self._parse_bench_list_output(result.stdout)
+                # Only return if we got valid benchmarks (more than just noise)
+                if parsed and len(parsed) >= 5:
+                    # Filter out invalid entries
+                    valid_benchmarks = [
+                        b for b in parsed 
+                        if len(b.name) >= 3 and len(b.name) <= 40 
+                        and not b.name in ['about', 'for', 'with', 'and', 'the', 'from', 'this', 'that']
+                    ]
+                    if len(valid_benchmarks) >= 5:
+                        return valid_benchmarks
         except (subprocess.TimeoutExpired, subprocess.SubprocessError):
             pass
         
@@ -136,8 +175,8 @@ class BenchmarkCatalog:
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(None, self._discover_benchmarks_sync)
     
-    def _get_static_benchmarks(self) -> list[Benchmark]:
-        """Return the static fallback benchmark list."""
+    def _get_featured_benchmarks(self) -> list[Benchmark]:
+        """Return the featured/popular benchmark list (always shown as cards)."""
         return [
             Benchmark(
                 name="mmlu",
@@ -147,6 +186,7 @@ class BenchmarkCatalog:
                            "language models on 57 subjects ranging from STEM to humanities. It evaluates "
                            "both world knowledge and problem solving ability.",
                 tags=["knowledge", "reasoning", "multi-subject"],
+                featured=True,
             ),
             Benchmark(
                 name="humaneval",
@@ -156,6 +196,7 @@ class BenchmarkCatalog:
                            "Each problem includes a function signature, docstring, body, and unit tests. "
                            "Models are evaluated on functional correctness.",
                 tags=["coding", "python", "generation"],
+                featured=True,
             ),
             Benchmark(
                 name="gsm8k",
@@ -165,6 +206,7 @@ class BenchmarkCatalog:
                            "These problems require multi-step reasoning to solve. Models are evaluated "
                            "on their ability to produce correct final answers.",
                 tags=["math", "reasoning", "word-problems"],
+                featured=True,
             ),
             Benchmark(
                 name="hellaswag",
@@ -174,6 +216,7 @@ class BenchmarkCatalog:
                            "Models must select the most plausible continuation for scenarios involving "
                            "physical activities and common situations.",
                 tags=["commonsense", "reasoning"],
+                featured=True,
             ),
             Benchmark(
                 name="arc",
@@ -183,6 +226,7 @@ class BenchmarkCatalog:
                            "The Challenge Set contains only questions that were answered incorrectly by "
                            "both a retrieval-based algorithm and a word co-occurrence algorithm.",
                 tags=["science", "reasoning", "multiple-choice"],
+                featured=True,
             ),
             Benchmark(
                 name="truthfulqa",
@@ -192,6 +236,7 @@ class BenchmarkCatalog:
                            "answers to questions. It contains 817 questions spanning 38 categories, "
                            "including health, law, finance and politics.",
                 tags=["truthfulness", "safety", "qa"],
+                featured=True,
             ),
             Benchmark(
                 name="winogrande",
@@ -201,6 +246,7 @@ class BenchmarkCatalog:
                            "Schema Challenge. It tests commonsense reasoning by requiring models to "
                            "resolve pronoun references correctly.",
                 tags=["commonsense", "reasoning", "coreference"],
+                featured=True,
             ),
             Benchmark(
                 name="mbpp",
@@ -210,6 +256,7 @@ class BenchmarkCatalog:
                            "Python programming problems. Each problem includes a task description, code solution, "
                            "and 3 automated test cases.",
                 tags=["coding", "python", "generation"],
+                featured=True,
             ),
             Benchmark(
                 name="drop",
@@ -218,6 +265,7 @@ class BenchmarkCatalog:
                 description="DROP is a reading comprehension benchmark requiring discrete reasoning over "
                            "paragraphs. Questions require counting, sorting, addition, or other discrete operations.",
                 tags=["reading", "reasoning", "math"],
+                featured=True,
             ),
             Benchmark(
                 name="bigbench",
@@ -227,6 +275,7 @@ class BenchmarkCatalog:
                            "linguistics, childhood development, math, common-sense reasoning, biology, "
                            "physics, social bias, and software development.",
                 tags=["diverse", "reasoning", "comprehensive"],
+                featured=True,
             ),
         ]
     
@@ -235,7 +284,8 @@ class BenchmarkCatalog:
         Get all available benchmarks.
         
         Uses cached data if available and not expired.
-        Attempts dynamic discovery, falls back to static list.
+        Merges featured benchmarks with dynamically discovered ones.
+        Featured benchmarks always appear first.
         """
         now = time.time()
         
@@ -243,24 +293,32 @@ class BenchmarkCatalog:
         if not force_refresh and self._cache and self._cache.expires_at > now:
             return self._cache.data
         
-        # Try dynamic discovery
-        benchmarks = await self._discover_benchmarks()
+        # Always start with featured benchmarks
+        featured = self._get_featured_benchmarks()
+        featured_names = {b.name for b in featured}
         
-        # Fall back to static list
-        if not benchmarks:
-            benchmarks = self._get_static_benchmarks()
+        # Try to discover additional benchmarks dynamically
+        discovered = await self._discover_benchmarks()
+        
+        # Filter out any discovered benchmarks that are already in featured
+        additional = []
+        if discovered:
+            additional = [b for b in discovered if b.name not in featured_names]
+        
+        # Combine: featured first, then additional (sorted by name)
+        all_benchmarks = featured + sorted(additional, key=lambda b: b.name)
         
         # Update cache
         self._cache = CacheEntry(
-            data=benchmarks,
+            data=all_benchmarks,
             expires_at=now + self.CACHE_TTL,
         )
         
         # Also populate details cache
-        for b in benchmarks:
+        for b in all_benchmarks:
             self._details_cache[b.name] = b
         
-        return benchmarks
+        return all_benchmarks
     
     async def get_benchmark(self, name: str) -> Optional[Benchmark]:
         """

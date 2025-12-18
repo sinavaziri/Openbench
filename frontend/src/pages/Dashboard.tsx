@@ -93,19 +93,8 @@ export default function Dashboard() {
   return (
     <Layout>
       {/* Header Section */}
-      <div className="grid grid-cols-[280px_1fr] gap-16 mb-16">
-        <div>
-          <p className="text-[11px] text-[#666] uppercase tracking-[0.1em] mb-4">
-            About
-          </p>
-          <p className="text-[15px] text-white leading-relaxed">
-            OpenBench is a benchmarking platform for evaluating AI models. 
-            Monitor runs, compare results, and track performance across different evaluations.
-          </p>
-        </div>
-        
-        <div>
-          <div className="grid grid-cols-4 gap-8">
+      <div className="mb-16">
+        <div className="grid grid-cols-4 gap-8">
             <div>
               <p className="text-[11px] text-[#666] uppercase tracking-[0.1em] mb-4">
                 Total
@@ -134,7 +123,6 @@ export default function Dashboard() {
               <p className="text-[32px] text-white tabular-nums">{stats.failed}</p>
             </div>
           </div>
-        </div>
       </div>
 
       {/* Error Message */}
@@ -182,7 +170,7 @@ export default function Dashboard() {
             )}
             
             <Link
-              to="/runs/new"
+              to="/"
               className="text-[13px] text-white hover:opacity-70 transition-opacity"
             >
               New Run →

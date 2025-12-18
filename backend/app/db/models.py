@@ -195,4 +195,5 @@ class Benchmark(BaseModel):
     description_short: str
     description: Optional[str] = None  # Full description for detail view
     tags: list[str] = Field(default_factory=list)
+    featured: bool = False  # Whether this is a featured/popular benchmark
 

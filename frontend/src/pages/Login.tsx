@@ -171,7 +171,7 @@ export default function Login() {
             to="/"
             className="text-[13px] text-[#555] hover:text-white transition-colors"
           >
-            ← Back to Dashboard
+            ← Back to Home
           </Link>
         </div>
       </div>

@@ -193,10 +193,10 @@ export default function Compare() {
             No runs selected for comparison
           </p>
           <Link
-            to="/"
+            to="/history"
             className="text-[14px] text-white hover:opacity-70 transition-opacity"
           >
-            ← Back to Dashboard
+            ← Back to History
           </Link>
         </div>
       </Layout>
@@ -209,10 +209,10 @@ export default function Compare() {
         <div className="text-center py-16">
           <p className="text-[15px] text-[#888] mb-4">{error}</p>
           <Link
-            to="/"
+            to="/history"
             className="text-[14px] text-white hover:opacity-70 transition-opacity"
           >
-            ← Back to Dashboard
+            ← Back to History
           </Link>
         </div>
       </Layout>
@@ -228,7 +228,7 @@ export default function Compare() {
       {/* Header */}
       <div className="mb-12">
         <Link
-          to="/"
+          to="/history"
           className="text-[13px] text-[#666] hover:text-white transition-colors mb-4 inline-block"
         >
           ← Back

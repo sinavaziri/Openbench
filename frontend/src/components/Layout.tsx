@@ -10,8 +10,8 @@ export default function Layout({ children }: LayoutProps) {
   const { user, isAuthenticated, loading } = useAuth();
 
   const navItems = [
-    { path: '/', label: 'Dashboard' },
-    { path: '/runs/new', label: 'New Run' },
+    { path: '/', label: 'New Run' },
+    { path: '/history', label: 'History' },
   ];
 
   return (

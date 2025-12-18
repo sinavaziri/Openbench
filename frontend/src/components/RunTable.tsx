@@ -114,7 +114,7 @@ export default function RunTable({
       <div className="border-t border-[#1a1a1a] py-16 text-center">
         <p className="text-[15px] text-[#666] mb-4">No runs yet</p>
         <Link
-          to="/runs/new"
+          to="/"
           className="text-[14px] text-white hover:opacity-70 transition-opacity"
         >
           Start a Run →

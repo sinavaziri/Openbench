@@ -50,13 +50,7 @@ import json
 import sys
 import random
 
-benchmark = "{benchmark}"
-model = "{config.model}"
-limit = {limit}
-
-# Use model name as seed for reproducible but model-specific results
-seed = hash(model) % (2**31)
-random.seed(seed)
+random.seed(42)  # Reproducible results
 
 benchmark = "{benchmark}"
 model = "{config.model}"

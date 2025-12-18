@@ -72,6 +72,7 @@ export interface Benchmark {
   description_short: string;
   description?: string;  // Full description for detail view
   tags: string[];
+  featured?: boolean;  // Whether this is a featured/popular benchmark
 }
 
 export interface RunConfig {
