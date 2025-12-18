@@ -1,0 +1,53 @@
+version: "3.8"
+
+services:
+  # FastAPI Backend
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: openbench-backend
+    restart: unless-stopped
+    environment:
+      # Secret key for JWT tokens (generate a secure random key for production)
+      - OPENBENCH_SECRET_KEY=${OPENBENCH_SECRET_KEY:-change-me-in-production}
+      # Encryption key for API keys at rest (generate a secure random key for production)
+      - OPENBENCH_ENCRYPTION_KEY=${OPENBENCH_ENCRYPTION_KEY:-change-me-in-production-32ch}
+    volumes:
+      # Persist data directory (database + run artifacts)
+      - ./data:/app/data
+    networks:
+      - openbench-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # React Frontend (nginx)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: openbench-frontend
+    restart: unless-stopped
+    ports:
+      # Expose on port 3000 (change as needed)
+      - "${OPENBENCH_PORT:-3000}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - openbench-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+networks:
+  openbench-network:
+    driver: bridge
+

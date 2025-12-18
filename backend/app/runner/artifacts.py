@@ -1,5 +1,6 @@
+import json
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from app.core.config import RUNS_DIR
 
@@ -45,4 +46,17 @@ def list_artifacts(run_id: str) -> list[str]:
     if not artifact_dir.exists():
         return []
     return [f.name for f in artifact_dir.iterdir() if f.is_file()]
+
+
+def read_summary(run_id: str) -> Optional[dict[str, Any]]:
+    """Read the summary.json file for a run."""
+    path = get_artifact_path(run_id, "summary.json")
+    if path is None:
+        return None
+    
+    try:
+        with open(path, "r") as f:
+            return json.load(f)
+    except Exception:
+        return None
 

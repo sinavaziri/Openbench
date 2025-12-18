@@ -1,0 +1,59 @@
+python -c '
+import time
+import json
+import sys
+import random
+
+random.seed(42)  # Reproducible results
+
+benchmark = "gsm8k"
+model = "test/user-a-run"
+limit = 1
+
+print("Starting mock benchmark run...")
+print(f"Benchmark: {benchmark}")
+print(f"Model: {model}")
+print(f"Limit: {limit}")
+print()
+
+for i in range(1):
+    print(f"Processing sample {i+1}/{limit}...")
+    time.sleep(1)
+
+print()
+print("Run completed successfully!")
+print()
+
+# Output mock results with rich structure
+# Generate category breakdowns based on benchmark type
+categories = {
+    "mmlu": ["math", "physics", "chemistry", "biology", "history", "geography"],
+    "hellaswag": ["physical", "social", "temporal", "emotional"],
+    "arc": ["easy", "challenge", "scientific"],
+    "gsm8k": ["arithmetic", "algebra", "geometry", "word_problems"],
+    "humaneval": ["algorithms", "data_structures", "string_manipulation", "math"],
+}
+
+benchmark_categories = categories.get(benchmark.lower(), ["category_a", "category_b", "category_c"])
+
+# Generate breakdown values
+breakdown_items = {}
+for cat in benchmark_categories:
+    breakdown_items[cat] = round(random.uniform(0.65, 0.95), 3)
+
+# Calculate overall accuracy as weighted average
+accuracy = round(sum(breakdown_items.values()) / len(breakdown_items), 3)
+
+result = {
+    "benchmark": benchmark,
+    "model": model,
+    "accuracy": accuracy,
+    "f1_score": round(accuracy * 0.98, 3),
+    "precision": round(accuracy * 1.02, 3),
+    "recall": round(accuracy * 0.96, 3),
+    "total_samples": limit,
+    "completed_samples": limit,
+    "category_breakdown": breakdown_items
+}
+print("RESULTS:", json.dumps(result))
+'

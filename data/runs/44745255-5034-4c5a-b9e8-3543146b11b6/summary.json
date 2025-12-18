@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "primary_metric": {"name": "accuracy", "value": 0.85, "unit": null},
+  "metrics": [
+    {"name": "accuracy", "value": 0.85, "unit": null},
+    {"name": "f1_score", "value": 0.833, "unit": null},
+    {"name": "precision", "value": 0.867, "unit": null},
+    {"name": "recall", "value": 0.816, "unit": null}
+  ],
+  "breakdowns": [
+    {
+      "name": "category_breakdown",
+      "items": [
+        {"key": "arithmetic", "value": 0.92, "unit": null},
+        {"key": "algebra", "value": 0.85, "unit": null},
+        {"key": "geometry", "value": 0.78, "unit": null},
+        {"key": "word_problems", "value": 0.82, "unit": null}
+      ]
+    }
+  ],
+  "notes": [],
+  "raw": {"source": "stdout.log (JSON)", "hint": "best-effort extraction"}
+}

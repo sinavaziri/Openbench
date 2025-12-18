@@ -10,6 +10,7 @@ from typing import Optional
 from app.core.config import RUNS_DIR
 from app.db.models import Run, RunConfig, RunStatus
 from app.runner.command_builder import build_mock_command, command_to_string
+from app.runner.summary_parser import parse_and_write_summary
 from app.services.run_store import run_store
 
 
@@ -42,8 +43,15 @@ class RunExecutor:
         """Check if the 'bench' CLI is available."""
         return shutil.which("bench") is not None
 
-    async def execute_run(self, run: Run) -> None:
-        """Execute a run asynchronously."""
+    async def execute_run(self, run: Run, api_keys: Optional[dict[str, str]] = None) -> None:
+        """
+        Execute a run asynchronously.
+        
+        Args:
+            run: The run to execute
+            api_keys: Optional dict of environment variable names to API key values
+                      to inject into the subprocess environment
+        """
         if run.config is None:
             await run_store.update_run(
                 run.run_id,
@@ -70,6 +78,12 @@ class RunExecutor:
         
         self._write_command(artifact_dir, cmd)
         
+        # Write list of env var names used (but never the values!)
+        if api_keys:
+            env_keys_used_path = artifact_dir / "env_keys_used.json"
+            with open(env_keys_used_path, "w") as f:
+                json.dump(list(api_keys.keys()), f, indent=2)
+        
         # Update run status to running
         await run_store.update_run(
             run.run_id,
@@ -82,6 +96,11 @@ class RunExecutor:
         stdout_path = artifact_dir / "stdout.log"
         stderr_path = artifact_dir / "stderr.log"
         
+        # Build environment with API keys
+        env = {**os.environ}
+        if api_keys:
+            env.update(api_keys)
+        
         try:
             with open(stdout_path, "w") as stdout_file, open(stderr_path, "w") as stderr_file:
                 # Start subprocess
@@ -90,7 +109,7 @@ class RunExecutor:
                     stdout=stdout_file,
                     stderr=stderr_file,
                     cwd=str(artifact_dir),
-                    env={**os.environ},
+                    env=env,
                 )
                 
                 self._running_processes[run.run_id] = process
@@ -126,6 +145,18 @@ class RunExecutor:
                     with open(stderr_path, "r") as f:
                         error = f.read()[-1000:]  # Last 1000 chars
                 
+                # Parse and write summary.json
+                primary_metric_value: Optional[float] = None
+                primary_metric_name: Optional[str] = None
+                try:
+                    summary = parse_and_write_summary(artifact_dir)
+                    if summary.primary_metric:
+                        primary_metric_value = summary.primary_metric.value
+                        primary_metric_name = summary.primary_metric.name
+                except Exception as e:
+                    # Summary parsing is best-effort, don't fail the run
+                    pass
+                
                 # Write meta.json
                 meta = {
                     "exit_code": exit_code,
@@ -141,6 +172,8 @@ class RunExecutor:
                     finished_at=datetime.utcnow(),
                     exit_code=exit_code,
                     error=error,
+                    primary_metric=primary_metric_value,
+                    primary_metric_name=primary_metric_name,
                 )
                 
         except Exception as e:
@@ -161,11 +194,17 @@ class RunExecutor:
         # Mark as canceled before terminating to prevent race condition
         self._canceled_runs.add(run_id)
         
-        process.terminate()
         try:
-            process.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            process.kill()
+            process.terminate()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+        except (PermissionError, OSError) as e:
+            # On some systems (e.g., macOS with code signing), we may not be able
+            # to terminate the process. In this case, we still mark it as canceled
+            # and let the process finish naturally.
+            pass
         
         self._running_processes.pop(run_id, None)
         

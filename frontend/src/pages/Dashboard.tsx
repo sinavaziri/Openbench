@@ -1,13 +1,18 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { api, RunSummary } from '../api/client';
 import Layout from '../components/Layout';
 import RunTable from '../components/RunTable';
 
 export default function Dashboard() {
+  const navigate = useNavigate();
   const [runs, setRuns] = useState<RunSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // Compare mode state
+  const [compareMode, setCompareMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     loadRuns();
@@ -26,6 +31,24 @@ export default function Dashboard() {
       setError(err instanceof Error ? err.message : 'Failed to load runs');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleToggleCompareMode = () => {
+    if (compareMode) {
+      // Exit compare mode
+      setCompareMode(false);
+      setSelectedIds(new Set());
+    } else {
+      // Enter compare mode
+      setCompareMode(true);
+    }
+  };
+
+  const handleCompare = () => {
+    if (selectedIds.size >= 2) {
+      const idsParam = Array.from(selectedIds).join(',');
+      navigate(`/compare?ids=${idsParam}`);
     }
   };
 
@@ -93,17 +116,68 @@ export default function Dashboard() {
       {/* Runs Section */}
       <div>
         <div className="flex items-center justify-between mb-8">
-          <p className="text-[11px] text-[#666] uppercase tracking-[0.1em]">
-            Recent Runs
-          </p>
-          <Link
-            to="/runs/new"
-            className="text-[13px] text-white hover:opacity-70 transition-opacity"
-          >
-            New Run →
-          </Link>
+          <div className="flex items-center gap-6">
+            <p className="text-[11px] text-[#666] uppercase tracking-[0.1em]">
+              Recent Runs
+            </p>
+            
+            {/* Compare Mode Toggle */}
+            <button
+              onClick={handleToggleCompareMode}
+              className={`text-[13px] transition-colors ${
+                compareMode 
+                  ? 'text-white' 
+                  : 'text-[#555] hover:text-white'
+              }`}
+            >
+              {compareMode ? '✕ Cancel' : 'Compare'}
+            </button>
+          </div>
+          
+          <div className="flex items-center gap-6">
+            {/* Compare Button (when in compare mode) */}
+            {compareMode && (
+              <button
+                onClick={handleCompare}
+                disabled={selectedIds.size < 2}
+                className={`text-[13px] px-4 py-2 transition-all ${
+                  selectedIds.size >= 2
+                    ? 'text-black bg-white hover:bg-[#e0e0e0]'
+                    : 'text-[#555] bg-[#222] cursor-not-allowed'
+                }`}
+              >
+                Compare {selectedIds.size > 0 && `(${selectedIds.size})`}
+              </button>
+            )}
+            
+            <Link
+              to="/runs/new"
+              className="text-[13px] text-white hover:opacity-70 transition-opacity"
+            >
+              New Run →
+            </Link>
+          </div>
         </div>
-        <RunTable runs={runs} loading={loading} />
+        
+        {/* Selection Info */}
+        {compareMode && (
+          <div className="mb-4 py-3 px-4 bg-[#111] border border-[#1a1a1a] text-[13px] text-[#888]">
+            {selectedIds.size === 0 
+              ? 'Select at least 2 runs to compare'
+              : selectedIds.size === 1
+              ? 'Select 1 more run to compare'
+              : `${selectedIds.size} runs selected`
+            }
+          </div>
+        )}
+        
+        <RunTable 
+          runs={runs} 
+          loading={loading}
+          selectable={compareMode}
+          selectedIds={selectedIds}
+          onSelectionChange={setSelectedIds}
+        />
       </div>
     </Layout>
   );

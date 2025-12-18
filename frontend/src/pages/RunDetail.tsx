@@ -3,6 +3,8 @@ import { Link, useParams } from 'react-router-dom';
 import { api, RunDetail as RunDetailType, SSEProgressEvent } from '../api/client';
 import Layout from '../components/Layout';
 import LogTail from '../components/LogTail';
+import MetricCards from '../components/MetricCards';
+import BreakdownChart from '../components/BreakdownChart';
 
 export default function RunDetail() {
   const { id } = useParams<{ id: string }>();
@@ -347,6 +349,52 @@ export default function RunDetail() {
           )}
         </div>
       </div>
+
+      {/* Results Section */}
+      {run.status === 'completed' && (
+        <div className="mb-12">
+          <p className="text-[11px] text-[#666] uppercase tracking-[0.1em] mb-6">
+            Results
+          </p>
+          
+          {run.summary && (run.summary.primary_metric || run.summary.metrics.length > 0) ? (
+            <div className="space-y-8">
+              <MetricCards
+                primaryMetric={run.summary.primary_metric}
+                metrics={run.summary.metrics}
+              />
+              
+              {run.summary.breakdowns.length > 0 && (
+                <BreakdownChart breakdowns={run.summary.breakdowns} />
+              )}
+              
+              {run.summary.notes.length > 0 && (
+                <div className="mt-6">
+                  <p className="text-[11px] text-[#555] uppercase tracking-[0.1em] mb-3">
+                    Notes
+                  </p>
+                  <ul className="space-y-1">
+                    {run.summary.notes.map((note, i) => (
+                      <li key={i} className="text-[13px] text-[#666]">
+                        {note}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="bg-[#0a0a0a] border border-[#1a1a1a] px-6 py-8 text-center">
+              <p className="text-[14px] text-[#555]">
+                No structured summary available
+              </p>
+              <p className="text-[12px] text-[#444] mt-2">
+                Check the logs below for raw output
+              </p>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Logs */}
       <div className="space-y-8">

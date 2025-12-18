@@ -1,4 +1,70 @@
 const API_BASE = '/api';
+const TOKEN_KEY = 'openbench_token';
+
+// =============================================================================
+// Auth Types
+// =============================================================================
+
+export interface User {
+  user_id: string;
+  email: string;
+  created_at: string;
+  is_active: boolean;
+}
+
+export interface AuthToken {
+  access_token: string;
+  token_type: string;
+}
+
+export interface LoginCredentials {
+  email: string;
+  password: string;
+}
+
+export interface RegisterCredentials {
+  email: string;
+  password: string;
+}
+
+// =============================================================================
+// API Key Types
+// =============================================================================
+
+export type ApiKeyProvider = 
+  | 'openai' 
+  | 'anthropic' 
+  | 'google' 
+  | 'mistral' 
+  | 'cohere' 
+  | 'together' 
+  | 'groq' 
+  | 'fireworks'
+  | 'openrouter'
+  | 'custom';
+
+export interface ApiKeyPublic {
+  key_id: string;
+  provider: ApiKeyProvider;
+  key_preview: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ApiKeyCreate {
+  provider: ApiKeyProvider;
+  key: string;
+}
+
+export interface ProviderInfo {
+  provider: ApiKeyProvider;
+  env_var: string;
+  display_name: string;
+}
+
+// =============================================================================
+// Benchmark Types
+// =============================================================================
 
 export interface Benchmark {
   name: string;
@@ -29,6 +95,37 @@ export interface RunSummary {
   created_at: string;
   finished_at?: string;
   primary_metric?: number;
+  primary_metric_name?: string;
+}
+
+// Structured summary types
+export interface MetricValue {
+  name: string;
+  value: number;
+  unit?: string | null;
+}
+
+export interface BreakdownItem {
+  key: string;
+  value: number;
+  unit?: string | null;
+}
+
+export interface Breakdown {
+  name: string;
+  items: BreakdownItem[];
+}
+
+export interface ResultSummary {
+  schema_version: number;
+  primary_metric: MetricValue | null;
+  metrics: MetricValue[];
+  breakdowns: Breakdown[];
+  notes: string[];
+  raw: {
+    source: string;
+    hint: string;
+  };
 }
 
 export interface RunDetail extends RunSummary {
@@ -41,6 +138,7 @@ export interface RunDetail extends RunSummary {
   artifacts: string[];
   stdout_tail?: string;
   stderr_tail?: string;
+  summary?: ResultSummary | null;  // Structured results summary
 }
 
 // SSE Event Types
@@ -92,25 +190,133 @@ export type SSEEventHandlers = {
 }
 
 class ApiClient {
+  private token: string | null = null;
+
+  constructor() {
+    // Load token from localStorage on init
+    this.token = localStorage.getItem(TOKEN_KEY);
+  }
+
+  // ===========================================================================
+  // Token Management
+  // ===========================================================================
+
+  setToken(token: string | null): void {
+    this.token = token;
+    if (token) {
+      localStorage.setItem(TOKEN_KEY, token);
+    } else {
+      localStorage.removeItem(TOKEN_KEY);
+    }
+  }
+
+  getToken(): string | null {
+    return this.token;
+  }
+
+  isAuthenticated(): boolean {
+    return this.token !== null;
+  }
+
+  // ===========================================================================
+  // HTTP Request Helper
+  // ===========================================================================
+
   private async request<T>(
     endpoint: string,
-    options: RequestInit = {}
+    options: RequestInit = {},
+    requireAuth: boolean = false
   ): Promise<T> {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...(options.headers as Record<string, string> || {}),
+    };
+
+    // Add auth header if we have a token
+    if (this.token) {
+      headers['Authorization'] = `Bearer ${this.token}`;
+    } else if (requireAuth) {
+      throw new Error('Authentication required');
+    }
+
     const response = await fetch(`${API_BASE}${endpoint}`, {
       ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
+      headers,
     });
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));
+      
+      // Handle auth errors specially
+      if (response.status === 401) {
+        this.setToken(null); // Clear invalid token
+        throw new Error(error.detail || 'Authentication required');
+      }
+      
       throw new Error(error.detail || `Request failed: ${response.status}`);
     }
 
     return response.json();
   }
+
+  // ===========================================================================
+  // Auth Endpoints
+  // ===========================================================================
+
+  async register(credentials: RegisterCredentials): Promise<AuthToken> {
+    const result = await this.request<AuthToken>('/auth/register', {
+      method: 'POST',
+      body: JSON.stringify(credentials),
+    });
+    this.setToken(result.access_token);
+    return result;
+  }
+
+  async login(credentials: LoginCredentials): Promise<AuthToken> {
+    const result = await this.request<AuthToken>('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify(credentials),
+    });
+    this.setToken(result.access_token);
+    return result;
+  }
+
+  logout(): void {
+    this.setToken(null);
+  }
+
+  async getMe(): Promise<User> {
+    return this.request<User>('/auth/me', {}, true);
+  }
+
+  // ===========================================================================
+  // API Keys Endpoints
+  // ===========================================================================
+
+  async listApiKeys(): Promise<ApiKeyPublic[]> {
+    return this.request<ApiKeyPublic[]>('/api-keys', {}, true);
+  }
+
+  async createOrUpdateApiKey(keyCreate: ApiKeyCreate): Promise<ApiKeyPublic> {
+    return this.request<ApiKeyPublic>('/api-keys', {
+      method: 'POST',
+      body: JSON.stringify(keyCreate),
+    }, true);
+  }
+
+  async deleteApiKey(provider: ApiKeyProvider): Promise<{ status: string }> {
+    return this.request<{ status: string }>(`/api-keys/${provider}`, {
+      method: 'DELETE',
+    }, true);
+  }
+
+  async listProviders(): Promise<ProviderInfo[]> {
+    return this.request<ProviderInfo[]>('/api-keys/providers');
+  }
+
+  // ===========================================================================
+  // Health & Benchmarks
+  // ===========================================================================
 
   async healthCheck(): Promise<{ status: string }> {
     return this.request('/health');
@@ -124,11 +330,15 @@ class ApiClient {
     return this.request(`/benchmarks/${name}`);
   }
 
+  // ===========================================================================
+  // Runs Endpoints
+  // ===========================================================================
+
   async createRun(config: RunConfig): Promise<{ run_id: string }> {
     return this.request('/runs', {
       method: 'POST',
       body: JSON.stringify(config),
-    });
+    }, true);  // Requires auth
   }
 
   async listRuns(limit: number = 50): Promise<RunSummary[]> {
@@ -142,7 +352,7 @@ class ApiClient {
   async cancelRun(runId: string): Promise<{ status: string }> {
     return this.request(`/runs/${runId}/cancel`, {
       method: 'POST',
-    });
+    }, true);  // Requires auth
   }
 
   /**

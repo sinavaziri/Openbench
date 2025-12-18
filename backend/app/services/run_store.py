@@ -9,25 +9,27 @@ from app.db.models import Run, RunConfig, RunCreate, RunStatus, RunSummary
 class RunStore:
     """Service for storing and retrieving runs from SQLite."""
 
-    async def create_run(self, run_create: RunCreate) -> Run:
+    async def create_run(self, run_create: RunCreate, user_id: Optional[str] = None) -> Run:
         """Create a new run and store it in the database."""
         config = RunConfig(**run_create.model_dump())
         run = Run(
             benchmark=run_create.benchmark,
             model=run_create.model,
             config=config,
+            user_id=user_id,
         )
         
         async with get_db() as db:
             await db.execute(
                 """
                 INSERT INTO runs (
-                    run_id, benchmark, model, status, created_at,
+                    run_id, user_id, benchmark, model, status, created_at,
                     started_at, finished_at, artifact_dir, exit_code, error, config_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     run.run_id,
+                    run.user_id,
                     run.benchmark,
                     run.model,
                     run.status.value,
@@ -44,23 +46,45 @@ class RunStore:
         
         return run
 
-    async def get_run(self, run_id: str) -> Optional[Run]:
-        """Get a run by ID."""
+    async def get_run(self, run_id: str, user_id: Optional[str] = None) -> Optional[Run]:
+        """
+        Get a run by ID.
+        
+        If user_id is provided, only returns the run if it belongs to that user
+        or if the run has no owner (legacy runs).
+        """
         async with get_db() as db:
-            cursor = await db.execute(
-                "SELECT * FROM runs WHERE run_id = ?", (run_id,)
-            )
+            if user_id is not None:
+                cursor = await db.execute(
+                    "SELECT * FROM runs WHERE run_id = ? AND (user_id = ? OR user_id IS NULL)",
+                    (run_id, user_id),
+                )
+            else:
+                cursor = await db.execute(
+                    "SELECT * FROM runs WHERE run_id = ?", (run_id,)
+                )
             row = await cursor.fetchone()
             if row is None:
                 return None
             return self._row_to_run(row)
 
-    async def list_runs(self, limit: int = 50) -> list[RunSummary]:
-        """List recent runs."""
+    async def list_runs(self, limit: int = 50, user_id: Optional[str] = None) -> list[RunSummary]:
+        """
+        List recent runs.
+        
+        If user_id is provided, only returns runs belonging to that user
+        or legacy runs (with no owner).
+        """
         async with get_db() as db:
-            cursor = await db.execute(
-                "SELECT * FROM runs ORDER BY created_at DESC LIMIT ?", (limit,)
-            )
+            if user_id is not None:
+                cursor = await db.execute(
+                    "SELECT * FROM runs WHERE user_id = ? OR user_id IS NULL ORDER BY created_at DESC LIMIT ?",
+                    (user_id, limit),
+                )
+            else:
+                cursor = await db.execute(
+                    "SELECT * FROM runs ORDER BY created_at DESC LIMIT ?", (limit,)
+                )
             rows = await cursor.fetchall()
             return [self._row_to_summary(row) for row in rows]
 
@@ -73,6 +97,8 @@ class RunStore:
         artifact_dir: Optional[str] = None,
         exit_code: Optional[int] = None,
         error: Optional[str] = None,
+        primary_metric: Optional[float] = None,
+        primary_metric_name: Optional[str] = None,
     ) -> Optional[Run]:
         """Update a run's fields."""
         updates = []
@@ -96,6 +122,12 @@ class RunStore:
         if error is not None:
             updates.append("error = ?")
             params.append(error)
+        if primary_metric is not None:
+            updates.append("primary_metric = ?")
+            params.append(primary_metric)
+        if primary_metric_name is not None:
+            updates.append("primary_metric_name = ?")
+            params.append(primary_metric_name)
         
         if not updates:
             return await self.get_run(run_id)
@@ -117,6 +149,7 @@ class RunStore:
         
         return Run(
             run_id=row["run_id"],
+            user_id=row["user_id"],
             benchmark=row["benchmark"],
             model=row["model"],
             status=RunStatus(row["status"]),
@@ -127,6 +160,8 @@ class RunStore:
             exit_code=row["exit_code"],
             error=row["error"],
             config=config,
+            primary_metric=row["primary_metric"],
+            primary_metric_name=row["primary_metric_name"],
         )
 
     def _row_to_summary(self, row) -> RunSummary:
@@ -138,6 +173,8 @@ class RunStore:
             status=RunStatus(row["status"]),
             created_at=datetime.fromisoformat(row["created_at"]),
             finished_at=datetime.fromisoformat(row["finished_at"]) if row["finished_at"] else None,
+            primary_metric=row["primary_metric"],
+            primary_metric_name=row["primary_metric_name"],
         )
 
 

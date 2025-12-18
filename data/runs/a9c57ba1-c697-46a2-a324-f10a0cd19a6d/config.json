@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "benchmark": "arc",
+  "model": "test/cancel-verify",
+  "limit": 60,
+  "temperature": null,
+  "top_p": null,
+  "max_tokens": null,
+  "timeout": null,
+  "epochs": null,
+  "max_connections": null
+}

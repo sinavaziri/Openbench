@@ -3,44 +3,62 @@ import os
 from datetime import datetime
 from typing import AsyncGenerator, Optional
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
+from app.core.auth import get_current_user, get_optional_user
 from app.core.config import RUNS_DIR
-from app.db.models import Run, RunCreate, RunStatus, RunSummary
-from app.runner.artifacts import list_artifacts, read_command, read_log_tail
+from app.db.models import Run, RunCreate, RunStatus, RunSummary, User
+from app.runner.artifacts import list_artifacts, read_command, read_log_tail, read_summary
 from app.runner.executor import executor
 from app.runner.progress_parser import parse_progress
+from app.services.api_keys import api_key_service
 from app.services.run_store import run_store
 
 router = APIRouter()
 
 
 @router.post("/runs", response_model=dict)
-async def create_run(run_create: RunCreate, background_tasks: BackgroundTasks):
+async def create_run(
+    run_create: RunCreate,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user),
+):
     """Create and start a new benchmark run."""
-    run = await run_store.create_run(run_create)
+    run = await run_store.create_run(run_create, user_id=current_user.user_id)
     
-    # Start execution in background
-    background_tasks.add_task(executor.execute_run, run)
+    # Get user's API keys for the run
+    env_vars = await api_key_service.get_decrypted_keys_for_run(current_user.user_id)
+    
+    # Start execution in background with API keys
+    background_tasks.add_task(executor.execute_run, run, env_vars)
     
     return {"run_id": run.run_id}
 
 
 @router.get("/runs", response_model=list[RunSummary])
-async def list_runs(limit: int = 50):
-    """List recent runs."""
-    return await run_store.list_runs(limit=limit)
+async def list_runs(
+    limit: int = 50,
+    current_user: Optional[User] = Depends(get_optional_user),
+):
+    """List recent runs for the current user."""
+    user_id = current_user.user_id if current_user else None
+    return await run_store.list_runs(limit=limit, user_id=user_id)
 
 
 @router.get("/runs/{run_id}")
-async def get_run(run_id: str, log_lines: int = 100):
+async def get_run(
+    run_id: str,
+    log_lines: int = 100,
+    current_user: Optional[User] = Depends(get_optional_user),
+):
     """
     Get details for a specific run.
     
-    Returns full run metadata including config, command, artifacts, and logs.
+    Returns full run metadata including config, command, artifacts, logs, and summary.
     """
-    run = await run_store.get_run(run_id)
+    user_id = current_user.user_id if current_user else None
+    run = await run_store.get_run(run_id, user_id=user_id)
     if run is None:
         raise HTTPException(status_code=404, detail="Run not found")
     
@@ -55,13 +73,20 @@ async def get_run(run_id: str, log_lines: int = 100):
     response["stdout_tail"] = read_log_tail(run_id, "stdout.log", log_lines)
     response["stderr_tail"] = read_log_tail(run_id, "stderr.log", log_lines)
     
+    # Read summary.json if available
+    summary = read_summary(run_id)
+    response["summary"] = summary
+    
     return response
 
 
 @router.post("/runs/{run_id}/cancel")
-async def cancel_run(run_id: str):
+async def cancel_run(
+    run_id: str,
+    current_user: User = Depends(get_current_user),
+):
     """Cancel a running benchmark."""
-    run = await run_store.get_run(run_id)
+    run = await run_store.get_run(run_id, user_id=current_user.user_id)
     if run is None:
         raise HTTPException(status_code=404, detail="Run not found")
     

@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "benchmark": "gsm8k",
+  "model": "test/final-m2-test",
+  "limit": 5,
+  "temperature": null,
+  "top_p": null,
+  "max_tokens": null,
+  "timeout": null,
+  "epochs": null,
+  "max_connections": null
+}

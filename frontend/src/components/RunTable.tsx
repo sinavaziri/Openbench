@@ -4,6 +4,9 @@ import type { RunSummary } from '../api/client';
 interface RunTableProps {
   runs: RunSummary[];
   loading?: boolean;
+  selectable?: boolean;
+  selectedIds?: Set<string>;
+  onSelectionChange?: (ids: Set<string>) => void;
 }
 
 function StatusIndicator({ status }: { status: RunSummary['status'] }) {
@@ -25,6 +28,20 @@ function StatusIndicator({ status }: { status: RunSummary['status'] }) {
   );
 }
 
+function formatMetric(value: number | undefined, name?: string): string {
+  if (value === undefined || value === null) return '—';
+  
+  // Format as percentage if value is between 0-1
+  if (value >= 0 && value <= 1) {
+    return `${(value * 100).toFixed(1)}%`;
+  }
+  
+  if (Number.isInteger(value)) {
+    return value.toString();
+  }
+  return value.toFixed(2);
+}
+
 function formatDate(dateStr: string): string {
   const date = new Date(dateStr);
   const now = new Date();
@@ -41,7 +58,43 @@ function formatDate(dateStr: string): string {
   return date.toLocaleDateString();
 }
 
-export default function RunTable({ runs, loading }: RunTableProps) {
+export default function RunTable({ 
+  runs, 
+  loading, 
+  selectable = false,
+  selectedIds = new Set(),
+  onSelectionChange,
+}: RunTableProps) {
+  const handleRowClick = (runId: string, e: React.MouseEvent) => {
+    if (!selectable || !onSelectionChange) return;
+    
+    // Only handle clicks if in selectable mode
+    e.preventDefault();
+    
+    const newSelection = new Set(selectedIds);
+    if (newSelection.has(runId)) {
+      newSelection.delete(runId);
+    } else {
+      newSelection.add(runId);
+    }
+    onSelectionChange(newSelection);
+  };
+
+  const handleCheckboxClick = (runId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    
+    if (!onSelectionChange) return;
+    
+    const newSelection = new Set(selectedIds);
+    if (newSelection.has(runId)) {
+      newSelection.delete(runId);
+    } else {
+      newSelection.add(runId);
+    }
+    onSelectionChange(newSelection);
+  };
+
   if (loading) {
     return (
       <div className="border-t border-[#1a1a1a]">
@@ -70,34 +123,124 @@ export default function RunTable({ runs, loading }: RunTableProps) {
     );
   }
 
+  const gridCols = selectable
+    ? 'grid-cols-[40px_180px_1fr_100px_120px_100px]'
+    : 'grid-cols-[200px_1fr_100px_120px_100px]';
+
   return (
     <div className="border-t border-[#1a1a1a]">
-      {runs.map((run) => (
-        <Link
-          key={run.run_id}
-          to={`/runs/${run.run_id}`}
-          className="grid grid-cols-[200px_1fr_120px_100px] gap-8 py-4 border-b border-[#1a1a1a] hover:bg-[#111] transition-colors group"
-        >
-          <div>
-            <span className="text-[15px] text-white">
-              {run.benchmark}
-            </span>
-          </div>
-          <div>
-            <span className="text-[14px] text-[#666]">
-              {run.model}
-            </span>
-          </div>
-          <div>
-            <StatusIndicator status={run.status} />
-          </div>
-          <div className="text-right">
-            <span className="text-[14px] text-[#666]">
-              {formatDate(run.created_at)}
-            </span>
-          </div>
-        </Link>
-      ))}
+      {/* Header */}
+      <div className={`grid ${gridCols} gap-8 py-3 border-b border-[#1a1a1a] text-[11px] text-[#555] uppercase tracking-[0.1em]`}>
+        {selectable && <div />}
+        <div>Benchmark</div>
+        <div>Model</div>
+        <div>Result</div>
+        <div>Status</div>
+        <div className="text-right">Time</div>
+      </div>
+      
+      {runs.map((run) => {
+        const isSelected = selectedIds.has(run.run_id);
+        const isCompleted = run.status === 'completed';
+
+        if (selectable) {
+          return (
+            <div
+              key={run.run_id}
+              onClick={(e) => handleRowClick(run.run_id, e)}
+              className={`grid ${gridCols} gap-8 py-4 border-b border-[#1a1a1a] transition-colors cursor-pointer ${
+                isSelected 
+                  ? 'bg-[#1a1a18]' 
+                  : 'hover:bg-[#111]'
+              }`}
+            >
+              <div className="flex items-center justify-center">
+                <div
+                  onClick={(e) => handleCheckboxClick(run.run_id, e)}
+                  className={`w-4 h-4 border rounded-sm flex items-center justify-center transition-colors ${
+                    isSelected
+                      ? 'bg-white border-white'
+                      : 'border-[#444] hover:border-[#666]'
+                  }`}
+                >
+                  {isSelected && (
+                    <svg className="w-3 h-3 text-black" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
+                </div>
+              </div>
+              <div>
+                <Link 
+                  to={`/runs/${run.run_id}`}
+                  onClick={(e) => e.stopPropagation()}
+                  className="text-[15px] text-white hover:underline"
+                >
+                  {run.benchmark}
+                </Link>
+              </div>
+              <div>
+                <span className="text-[14px] text-[#666]">
+                  {run.model}
+                </span>
+              </div>
+              <div>
+                {isCompleted && run.primary_metric !== undefined && run.primary_metric !== null ? (
+                  <span className="text-[15px] text-white tabular-nums font-light">
+                    {formatMetric(run.primary_metric, run.primary_metric_name)}
+                  </span>
+                ) : (
+                  <span className="text-[14px] text-[#444]">—</span>
+                )}
+              </div>
+              <div>
+                <StatusIndicator status={run.status} />
+              </div>
+              <div className="text-right">
+                <span className="text-[14px] text-[#666]">
+                  {formatDate(run.created_at)}
+                </span>
+              </div>
+            </div>
+          );
+        }
+
+        return (
+          <Link
+            key={run.run_id}
+            to={`/runs/${run.run_id}`}
+            className={`grid ${gridCols} gap-8 py-4 border-b border-[#1a1a1a] hover:bg-[#111] transition-colors group`}
+          >
+            <div>
+              <span className="text-[15px] text-white">
+                {run.benchmark}
+              </span>
+            </div>
+            <div>
+              <span className="text-[14px] text-[#666]">
+                {run.model}
+              </span>
+            </div>
+            <div>
+              {isCompleted && run.primary_metric !== undefined && run.primary_metric !== null ? (
+                <span className="text-[15px] text-white tabular-nums font-light">
+                  {formatMetric(run.primary_metric, run.primary_metric_name)}
+                </span>
+              ) : (
+                <span className="text-[14px] text-[#444]">—</span>
+              )}
+            </div>
+            <div>
+              <StatusIndicator status={run.status} />
+            </div>
+            <div className="text-right">
+              <span className="text-[14px] text-[#666]">
+                {formatDate(run.created_at)}
+              </span>
+            </div>
+          </Link>
+        );
+      })}
     </div>
   );
 }

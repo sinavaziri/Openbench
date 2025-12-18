@@ -1,0 +1,19 @@
+# Git
+.git/
+.gitignore
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Documentation
+*.md
+
+# Environment files with secrets
+.env
+
+# Docker files (prevent context pollution)
+docker-compose*.yml
+

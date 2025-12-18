@@ -1,4 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -6,6 +7,7 @@ interface LayoutProps {
 
 export default function Layout({ children }: LayoutProps) {
   const location = useLocation();
+  const { user, isAuthenticated, loading } = useAuth();
 
   const navItems = [
     { path: '/', label: 'Dashboard' },
@@ -36,6 +38,34 @@ export default function Layout({ children }: LayoutProps) {
                   {item.label}
                 </Link>
               ))}
+              
+              {/* Auth section */}
+              {!loading && (
+                isAuthenticated ? (
+                  <div className="flex items-center gap-4 border-l border-[#222] pl-8 ml-2">
+                    <Link
+                      to="/settings"
+                      className={`text-sm tracking-wide transition-opacity ${
+                        location.pathname === '/settings'
+                          ? 'text-white'
+                          : 'text-[#666] hover:text-white'
+                      }`}
+                    >
+                      Settings
+                    </Link>
+                    <span className="text-[12px] text-[#444] truncate max-w-32">
+                      {user?.email}
+                    </span>
+                  </div>
+                ) : (
+                  <Link
+                    to="/login"
+                    className="text-sm text-[#666] hover:text-white transition-opacity border-l border-[#222] pl-8 ml-2"
+                  >
+                    Sign In
+                  </Link>
+                )
+              )}
             </div>
           </div>
         </div>
