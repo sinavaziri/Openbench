@@ -105,10 +105,6 @@ export default function RunForm({ benchmarks, apiKeys, onSubmit, loading, prefil
     return true;
   });
 
-  // Separate featured and additional benchmarks
-  const featuredBenchmarks = validBenchmarks.filter((b) => b.featured);
-  const additionalBenchmarks = validBenchmarks.filter((b) => !b.featured);
-
   const selectedBenchmark = validBenchmarks.find((b) => b.name === benchmark);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -153,61 +149,26 @@ export default function RunForm({ benchmarks, apiKeys, onSubmit, loading, prefil
       {/* Benchmark Selection */}
       <div>
         <p className="text-[11px] text-[#666] uppercase tracking-[0.1em] mb-4">
-          Popular Benchmarks
+          Benchmark
         </p>
-        <div className="grid grid-cols-2 gap-3 mb-6">
-          {featuredBenchmarks.map((b, index) => (
-            <button
-              key={`${b.name}-${index}`}
-              type="button"
-              onClick={() => setBenchmark(b.name)}
-              className={`relative p-4 text-left transition-all border ${
-                benchmark === b.name
-                  ? 'border-white bg-[#111]'
-                  : 'border-[#222] hover:border-[#444]'
-              }`}
-            >
-              <div className="flex items-start justify-between gap-3 mb-2">
-                <span className="text-[15px] text-white break-words flex-1">
-                  {b.name}
-                </span>
-                <span className="text-[11px] text-[#666] uppercase tracking-wide flex-shrink-0">
-                  {b.category}
-                </span>
-              </div>
-              <p className="text-[13px] text-[#666] line-clamp-2 break-words">
-                {b.description_short}
-              </p>
-            </button>
+        <select
+          value={benchmark}
+          onChange={(e) => setBenchmark(e.target.value)}
+          className="w-full px-4 py-3 bg-[#0c0c0c] border border-[#222] text-white text-[15px] focus:border-white transition-colors appearance-none cursor-pointer hover:border-[#444]"
+          style={{
+            backgroundImage: `url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%23666' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`,
+            backgroundRepeat: 'no-repeat',
+            backgroundPosition: 'right 1rem center',
+            backgroundSize: '12px 8px',
+          }}
+        >
+          <option value="">Select a benchmark...</option>
+          {validBenchmarks.map((b) => (
+            <option key={b.name} value={b.name}>
+              {b.name} {b.category ? `(${b.category})` : ''} {b.description_short ? `- ${b.description_short}` : ''}
+            </option>
           ))}
-        </div>
-
-        {/* Additional Benchmarks Dropdown */}
-        {additionalBenchmarks.length > 0 && (
-          <div>
-            <p className="text-[11px] text-[#666] uppercase tracking-[0.1em] mb-3">
-              More Benchmarks
-            </p>
-            <select
-              value={additionalBenchmarks.some(b => b.name === benchmark) ? benchmark : ''}
-              onChange={(e) => setBenchmark(e.target.value)}
-              className="w-full px-4 py-3 bg-[#0c0c0c] border border-[#222] text-white text-[15px] focus:border-white transition-colors appearance-none cursor-pointer hover:border-[#444]"
-              style={{
-                backgroundImage: `url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%23666' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`,
-                backgroundRepeat: 'no-repeat',
-                backgroundPosition: 'right 1rem center',
-                backgroundSize: '12px 8px',
-              }}
-            >
-              <option value="">Select additional benchmark...</option>
-              {additionalBenchmarks.map((b) => (
-                <option key={b.name} value={b.name}>
-                  {b.name} - {b.description_short}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
+        </select>
       </div>
 
       {/* Model Selection */}

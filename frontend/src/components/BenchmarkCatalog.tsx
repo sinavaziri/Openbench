@@ -1,0 +1,223 @@
+import { useState, useMemo } from 'react';
+import { Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Benchmark } from '../api/client';
+import BenchmarkCard from './BenchmarkCard';
+
+interface BenchmarkCatalogProps {
+  benchmarks: Benchmark[];
+  onBenchmarkSelect: (benchmark: Benchmark) => void;
+  selectedBenchmark?: Benchmark;
+}
+
+const ITEMS_PER_PAGE = 9;
+
+export default function BenchmarkCatalog({ 
+  benchmarks, 
+  onBenchmarkSelect,
+  selectedBenchmark 
+}: BenchmarkCatalogProps) {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [currentPage, setCurrentPage] = useState(1);
+
+  // Extract unique categories
+  const categories = useMemo(() => {
+    const cats = new Set(benchmarks.map(b => b.category).filter(Boolean));
+    return ['all', ...Array.from(cats).sort()];
+  }, [benchmarks]);
+
+  // Filter benchmarks
+  const filteredBenchmarks = useMemo(() => {
+    let filtered = benchmarks;
+
+    // Apply category filter
+    if (selectedCategory !== 'all') {
+      filtered = filtered.filter(b => b.category === selectedCategory);
+    }
+
+    // Apply search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(b =>
+        b.name.toLowerCase().includes(query) ||
+        b.description?.toLowerCase().includes(query)
+      );
+    }
+
+    return filtered;
+  }, [benchmarks, selectedCategory, searchQuery]);
+
+  // Reset to page 1 when filters change
+  useMemo(() => {
+    setCurrentPage(1);
+  }, [searchQuery, selectedCategory]);
+
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredBenchmarks.length / ITEMS_PER_PAGE);
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const paginatedBenchmarks = filteredBenchmarks.slice(startIndex, endIndex);
+
+  const handlePreviousPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage(currentPage - 1);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  const handleNextPage = () => {
+    if (currentPage < totalPages) {
+      setCurrentPage(currentPage + 1);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  return (
+    <div className="mb-12">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h2 className="text-[11px] text-[#666] uppercase tracking-[0.1em] mb-1">
+            Browse Benchmarks
+          </h2>
+          <p className="text-[13px] text-[#888]">
+            {filteredBenchmarks.length === benchmarks.length
+              ? `${benchmarks.length} benchmarks`
+              : `Showing ${filteredBenchmarks.length} result${filteredBenchmarks.length !== 1 ? 's' : ''}`
+            }
+          </p>
+        </div>
+      </div>
+
+      {/* Search and Filter Controls */}
+      <div className="grid grid-cols-2 gap-4 mb-8">
+        {/* Search Bar */}
+        <div className="relative">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#666]" />
+          <input
+            type="text"
+            placeholder="Search benchmarks..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="
+              w-full h-10 pl-10 pr-4 
+              bg-[#0a0a0a] border border-[#1a1a1a] 
+              text-[13px] text-white placeholder-[#666]
+              focus:border-[#333] focus:outline-none
+              transition-colors
+            "
+          />
+        </div>
+
+        {/* Category Filter */}
+        <div className="relative">
+          <select
+            value={selectedCategory}
+            onChange={(e) => setSelectedCategory(e.target.value)}
+            className="
+              w-full h-10 px-4 
+              bg-[#0a0a0a] border border-[#1a1a1a] 
+              text-[13px] text-white
+              focus:border-[#333] focus:outline-none
+              transition-colors
+              appearance-none
+              cursor-pointer
+            "
+          >
+            {categories.map(cat => (
+              <option key={cat} value={cat}>
+                {cat === 'all' ? 'All Categories' : cat}
+              </option>
+            ))}
+          </select>
+          <svg
+            className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[#666] pointer-events-none"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </div>
+      </div>
+
+      {/* Grid */}
+      {paginatedBenchmarks.length > 0 ? (
+        <>
+          <div className="grid grid-cols-3 gap-6 mb-8">
+            {paginatedBenchmarks.map((benchmark) => (
+              <BenchmarkCard
+                key={benchmark.name}
+                benchmark={benchmark}
+                onClick={() => onBenchmarkSelect(benchmark)}
+                isSelected={selectedBenchmark?.name === benchmark.name}
+              />
+            ))}
+          </div>
+
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between pt-6 border-t border-[#1a1a1a]">
+              {/* Previous Button */}
+              <button
+                onClick={handlePreviousPage}
+                disabled={currentPage === 1}
+                className={`
+                  flex items-center gap-2 text-[13px] transition-colors
+                  ${currentPage === 1 
+                    ? 'text-[#666] cursor-not-allowed' 
+                    : 'text-white hover:text-[#ccc] cursor-pointer'
+                  }
+                `}
+              >
+                <ChevronLeft size={16} />
+                Previous
+              </button>
+
+              {/* Page Indicator */}
+              <div className="text-[13px] text-[#888]">
+                Page {currentPage} of {totalPages}
+                <span className="text-[#666] mx-2">·</span>
+                Showing {startIndex + 1}-{Math.min(endIndex, filteredBenchmarks.length)} of {filteredBenchmarks.length}
+              </div>
+
+              {/* Next Button */}
+              <button
+                onClick={handleNextPage}
+                disabled={currentPage === totalPages}
+                className={`
+                  flex items-center gap-2 text-[13px] transition-colors
+                  ${currentPage === totalPages
+                    ? 'text-[#666] cursor-not-allowed'
+                    : 'text-white hover:text-[#ccc] cursor-pointer'
+                  }
+                `}
+              >
+                Next
+                <ChevronRight size={16} />
+              </button>
+            </div>
+          )}
+        </>
+      ) : (
+        <div className="text-center py-16">
+          <p className="text-[14px] text-[#666]">
+            No benchmarks found
+          </p>
+          {(searchQuery || selectedCategory !== 'all') && (
+            <button
+              onClick={() => {
+                setSearchQuery('');
+                setSelectedCategory('all');
+              }}
+              className="mt-4 text-[13px] text-white hover:text-[#ccc] transition-colors"
+            >
+              Clear filters
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+

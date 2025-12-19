@@ -45,10 +45,9 @@ class BenchmarkCatalog:
         """
         Parse the output of `bench list`.
         
-        Expected format (one benchmark per line):
-        - mmlu: Massive Multitask Language Understanding
-        - humaneval: Python programming problems
-        ...
+        Expected format: 3-column table
+         benchmark_id        Display Name          Description...
+                                                   (continuation lines...)
         
         Or JSON format if available.
         """
@@ -77,61 +76,58 @@ class BenchmarkCatalog:
         except json.JSONDecodeError:
             pass
         
-        # Parse line-by-line format
-        for line in output.strip().split("\n"):
-            line = line.strip()
-            
-            # Skip empty lines, comments, and decorative elements
-            if not line or line.startswith("#"):
+        # Box drawing characters to skip
+        box_chars = {'─', '│', '┌', '┐', '└', '┘', '├', '┤', '┬', '┴', '┼', 
+                    '╭', '╮', '╯', '╰', '═', '║', '╔', '╗', '╚', '╝', '━', '┃',
+                    '┏', '┓', '┗', '┛', '╒', '╓', '╕', '╖', '╘', '╙', '╛', '╜',
+                    '╞', '╟', '╡', '╢', '╤', '╥', '╧', '╨', '╪', '╫', '╬',
+                    '▀', '▄', '█', '▌', '▐', '░', '▒', '▓'}
+        
+        # Parse table format - benchmark entries start with exactly one space
+        # Format: " benchmark_id        Display Name          Description..."
+        import re
+        
+        for line in output.split("\n"):
+            # Skip empty lines
+            if not line.strip():
                 continue
-            
-            # Skip box drawing characters and decorative lines
-            # Common box drawing characters: ─ │ ┌ ┐ └ ┘ ├ ┤ ┬ ┴ ┼ ╭ ╮ ╯ ╰ ═ ║ ╔ ╗ ╚ ╝
-            box_chars = {'─', '│', '┌', '┐', '└', '┘', '├', '┤', '┬', '┴', '┼', 
-                        '╭', '╮', '╯', '╰', '═', '║', '╔', '╗', '╚', '╝', '━', '┃',
-                        '┏', '┓', '┗', '┛', '╒', '╓', '╕', '╖', '╘', '╙', '╛', '╜',
-                        '╞', '╟', '╡', '╢', '╤', '╥', '╧', '╨', '╪', '╫', '╬',
-                        '▀', '▄', '█', '▌', '▐', '░', '▒', '▓', '⎯', '⎺', '⎻', '⎼', '⎽',
-                        '•', '●', '○', '◦', '▪', '▫', '■', '□', '▬'}
-            
-            # Skip lines that are mostly box drawing characters or separators
-            stripped = line.replace(' ', '')
-            if not stripped or all(c in box_chars for c in stripped):
+                
+            # Skip lines that are mostly box drawing characters
+            if any(c in box_chars for c in line[:5]):
                 continue
-            
-            # Skip header lines (e.g., "Available Benchmarks", "Community Benchmarks")
-            if 'benchmark' in line.lower() and line.lower().count('benchmark') >= 1 and not any(c.isalpha() and c.islower() for c in line[:10]):
+                
+            # Skip header/section lines (e.g., "Available Benchmarks", "Core Benchmarks (57)")
+            if re.match(r'^\s*[A-Z][a-z]+.*Benchmark', line):
                 continue
-            
-            # Handle "- name: description" format
-            if line.startswith("- "):
-                line = line[2:]
-            
-            # Parse table format: "name    DisplayName    Description"
-            # The benchmark ID is typically the first word
-            parts = line.split(None, 1)  # Split on first whitespace
-            if not parts:
-                continue
-            
-            name = parts[0].strip()
-            desc = parts[1].strip() if len(parts) > 1 else ""
-            
-            # Skip if name contains box chars or is suspiciously long
-            if any(c in box_chars for c in name) or len(name) > 50:
-                continue
-            
-            # Skip section headers and continuation lines
-            if name.lower() in ['name', 'benchmark', 'benchmarks', 'subsets)', 'tasks', 'reasoning', 'community']:
-                continue
-            
-            # Basic validation: benchmark names should be lowercase, alphanumeric with hyphens/underscores
-            if name and (name.islower() or '_' in name or '-' in name) and not name.endswith('...'):
-                benchmarks.append(Benchmark(
-                    name=name,
-                    category="general",
-                    description_short=desc,
-                    tags=[],
-                ))
+            if line.strip().startswith('Total:') or line.strip().startswith('Commands:'):
+                break
+                
+            # Benchmark lines start with exactly 1 space, then the benchmark ID
+            # ID is lowercase/numbers/underscores/hyphens, possibly ending with …
+            match = re.match(r'^ ([a-z0-9_-]+…?)\s+(.+)', line)
+            if match:
+                benchmark_id = match.group(1).rstrip('…')  # Remove trailing …
+                rest_of_line = match.group(2).strip()
+                
+                # Parse the rest: Display Name and Description (both optional)
+                # Usually separated by multiple spaces, but display name can have spaces
+                # The description is typically after ~40+ characters from start
+                # For simplicity, we'll use the first portion as display name
+                parts = rest_of_line.split(None, 1)
+                display_name = parts[0] if parts else ""
+                description = parts[1] if len(parts) > 1 else ""
+                
+                # Validate benchmark ID
+                if len(benchmark_id) >= 3 and len(benchmark_id) <= 50:
+                    # Try to extract category from context (section headers)
+                    category = "general"
+                    
+                    benchmarks.append(Benchmark(
+                        name=benchmark_id,
+                        category=category,
+                        description_short=description[:200] if description else display_name,
+                        tags=[],
+                    ))
         
         return benchmarks
     
@@ -145,7 +141,7 @@ class BenchmarkCatalog:
         
         try:
             result = subprocess.run(
-                ["bench", "list"],
+                ["bench", "list", "--all"],
                 capture_output=True,
                 text=True,
                 timeout=30,
@@ -277,6 +273,32 @@ class BenchmarkCatalog:
                 tags=["diverse", "reasoning", "comprehensive"],
                 featured=True,
             ),
+            # Additional benchmarks for pagination demo
+            Benchmark(name="boolq", category="reading", description_short="Boolean questions from natural queries", tags=["qa", "reading"], featured=False),
+            Benchmark(name="piqa", category="commonsense", description_short="Physical commonsense reasoning", tags=["commonsense"], featured=False),
+            Benchmark(name="siqa", category="commonsense", description_short="Social interaction QA", tags=["commonsense", "social"], featured=False),
+            Benchmark(name="openbookqa", category="science", description_short="Elementary science questions", tags=["science", "qa"], featured=False),
+            Benchmark(name="squad", category="reading", description_short="Stanford Question Answering Dataset", tags=["reading", "qa"], featured=False),
+            Benchmark(name="race", category="reading", description_short="Reading comprehension from exams", tags=["reading"], featured=False),
+            Benchmark(name="math", category="math", description_short="Competition mathematics problems", tags=["math", "reasoning"], featured=False),
+            Benchmark(name="gpqa", category="science", description_short="Graduate-level science questions", tags=["science", "expert"], featured=False),
+            Benchmark(name="mmmu", category="diverse", description_short="Multimodal understanding benchmark", tags=["multimodal", "diverse"], featured=False),
+            Benchmark(name="mathvista", category="math", description_short="Mathematical reasoning in visual contexts", tags=["math", "multimodal"], featured=False),
+            Benchmark(name="medqa", category="science", description_short="Medical exam questions", tags=["medical", "science"], featured=False),
+            Benchmark(name="pubmedqa", category="science", description_short="Biomedical question answering", tags=["medical", "science"], featured=False),
+            Benchmark(name="triviaqa", category="knowledge", description_short="Trivia questions with evidence", tags=["knowledge", "qa"], featured=False),
+            Benchmark(name="naturalqa", category="knowledge", description_short="Questions from Google searches", tags=["knowledge", "qa"], featured=False),
+            Benchmark(name="coqa", category="reading", description_short="Conversational question answering", tags=["reading", "conversation"], featured=False),
+            Benchmark(name="quac", category="reading", description_short="Question answering in context", tags=["reading", "conversation"], featured=False),
+            Benchmark(name="hotpotqa", category="reading", description_short="Multi-hop question answering", tags=["reading", "reasoning"], featured=False),
+            Benchmark(name="commonsenseqa", category="commonsense", description_short="Commonsense question answering", tags=["commonsense", "qa"], featured=False),
+            Benchmark(name="socialiqa", category="commonsense", description_short="Social situations reasoning", tags=["commonsense", "social"], featured=False),
+            Benchmark(name="cosmosqa", category="commonsense", description_short="Commonsense reading comprehension", tags=["commonsense", "reading"], featured=False),
+            Benchmark(name="anli", category="reading", description_short="Adversarial NLI", tags=["reading", "nli"], featured=False),
+            Benchmark(name="mnli", category="reading", description_short="Multi-genre NLI", tags=["reading", "nli"], featured=False),
+            Benchmark(name="snli", category="reading", description_short="Stanford NLI", tags=["reading", "nli"], featured=False),
+            Benchmark(name="wnli", category="reading", description_short="Winograd NLI", tags=["reading", "nli"], featured=False),
+            Benchmark(name="rte", category="reading", description_short="Recognizing textual entailment", tags=["reading", "nli"], featured=False),
         ]
     
     async def get_benchmarks(self, force_refresh: bool = False) -> list[Benchmark]:

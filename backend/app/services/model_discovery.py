@@ -232,7 +232,7 @@ class ModelDiscoveryService:
             if static_models:
                 return ModelProvider(
                     name=config.name,
-                    provider_key=provider.value,
+                    provider_key=provider,
                     models=static_models
                 )
             return None
@@ -246,7 +246,7 @@ class ModelDiscoveryService:
         try:
             decrypted_key = decrypt_api_key(api_key.encrypted_key)
         except Exception as e:
-            print(f"Failed to decrypt API key for {provider.value}: {e}")
+            print(f"Failed to decrypt API key for {provider}: {e}")
             return None
         
         # Make API request
@@ -260,7 +260,7 @@ class ModelDiscoveryService:
                 response = await client.get(url, headers=headers)
                 
                 if response.status_code != 200:
-                    print(f"Failed to fetch models from {provider.value}: HTTP {response.status_code}")
+                    print(f"Failed to fetch models from {provider}: HTTP {response.status_code}")
                     return None
                 
                 data = response.json()
@@ -269,14 +269,14 @@ class ModelDiscoveryService:
                 if models:
                     return ModelProvider(
                         name=config.name,
-                        provider_key=provider.value,
+                        provider_key=provider,
                         models=models
                     )
                 
         except httpx.TimeoutException:
-            print(f"Timeout fetching models from {provider.value}")
+            print(f"Timeout fetching models from {provider}")
         except Exception as e:
-            print(f"Error fetching models from {provider.value}: {e}")
+            print(f"Error fetching models from {provider}: {e}")
         
         return None
     
@@ -352,14 +352,14 @@ class ModelDiscoveryService:
                     ))
                 elif isinstance(item, str):
                     # Simple string list
-                    model_id = item if "/" in item else f"{provider.value}/{item}"
+                    model_id = item if "/" in item else f"{provider}/{item}"
                     models.append(ModelInfo(
                         id=model_id,
                         name=item,
                     ))
         
         except Exception as e:
-            print(f"Error parsing models response for {provider.value}: {e}")
+            print(f"Error parsing models response for {provider}: {e}")
         
         return models
     
