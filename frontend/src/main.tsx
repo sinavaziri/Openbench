@@ -5,6 +5,7 @@ import { AuthProvider } from './context/AuthContext'
 import Dashboard from './pages/Dashboard'
 import NewRun from './pages/NewRun'
 import RunDetail from './pages/RunDetail'
+import EvalViewer from './pages/EvalViewer'
 import Compare from './pages/Compare'
 import Login from './pages/Login'
 import Settings from './pages/Settings'
@@ -27,6 +28,7 @@ const router = createBrowserRouter([
       { path: '/', element: <NewRun /> },
       { path: '/history', element: <Dashboard /> },
       { path: '/runs/:id', element: <RunDetail /> },
+      { path: '/runs/:id/eval/*', element: <EvalViewer /> },
       { path: '/compare', element: <Compare /> },
       { path: '/login', element: <Login /> },
       { path: '/settings', element: <Settings /> },

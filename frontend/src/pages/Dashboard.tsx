@@ -28,9 +28,10 @@ export default function Dashboard() {
   const [benchmarkFilter, setBenchmarkFilter] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   
-  // Compare mode state
-  const [compareMode, setCompareMode] = useState(false);
+  // Selection mode state
+  const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const loadRuns = useCallback(async () => {
     try {
@@ -79,14 +80,14 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, [loadRuns, loadTags, loadBenchmarks]);
 
-  const handleToggleCompareMode = () => {
-    if (compareMode) {
-      // Exit compare mode
-      setCompareMode(false);
+  const handleToggleSelectionMode = () => {
+    if (selectionMode) {
+      // Exit selection mode
+      setSelectionMode(false);
       setSelectedIds(new Set());
     } else {
-      // Enter compare mode
-      setCompareMode(true);
+      // Enter selection mode
+      setSelectionMode(true);
     }
   };
 
@@ -94,6 +95,40 @@ export default function Dashboard() {
     if (selectedIds.size >= 2) {
       const idsParam = Array.from(selectedIds).join(',');
       navigate(`/compare?ids=${idsParam}`);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (selectedIds.size === 0 || isDeleting) return;
+    
+    const confirmMessage = selectedIds.size === 1 
+      ? 'Are you sure you want to delete this run?'
+      : `Are you sure you want to delete ${selectedIds.size} runs?`;
+    
+    if (!confirm(confirmMessage)) return;
+    
+    setIsDeleting(true);
+    try {
+      const result = await api.bulkDeleteRuns(Array.from(selectedIds));
+      
+      // Show summary
+      let message = `Deleted ${result.summary.deleted} run(s)`;
+      if (result.summary.running > 0) {
+        message += `\n${result.summary.running} run(s) are currently running and cannot be deleted.`;
+      }
+      if (result.summary.failed > 0 || result.summary.not_found > 0) {
+        message += `\nFailed to delete ${result.summary.failed + result.summary.not_found} run(s).`;
+      }
+      
+      alert(message);
+      
+      // Clear selection and reload
+      setSelectedIds(new Set());
+      await loadRuns();
+    } catch (err) {
+      alert(`Failed to delete runs: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -154,33 +189,46 @@ export default function Dashboard() {
               Runs
             </p>
             
-            {/* Compare Mode Toggle */}
+            {/* Selection Mode Toggle */}
             <button
-              onClick={handleToggleCompareMode}
+              onClick={handleToggleSelectionMode}
               className={`text-[13px] transition-colors ${
-                compareMode 
+                selectionMode 
                   ? 'text-white' 
                   : 'text-[#555] hover:text-white'
               }`}
             >
-              {compareMode ? '✕ Cancel' : 'Compare'}
+              {selectionMode ? '✕ Cancel' : 'Select'}
             </button>
           </div>
           
-          <div className="flex items-center gap-6">
-            {/* Compare Button (when in compare mode) */}
-            {compareMode && (
-              <button
-                onClick={handleCompare}
-                disabled={selectedIds.size < 2}
-                className={`text-[13px] px-4 py-2 transition-all ${
-                  selectedIds.size >= 2
-                    ? 'text-black bg-white hover:bg-[#e0e0e0]'
-                    : 'text-[#555] bg-[#222] cursor-not-allowed'
-                }`}
-              >
-                Compare {selectedIds.size > 0 && `(${selectedIds.size})`}
-              </button>
+          <div className="flex items-center gap-4">
+            {/* Action Buttons (when in selection mode) */}
+            {selectionMode && (
+              <>
+                <button
+                  onClick={handleDelete}
+                  disabled={selectedIds.size === 0 || isDeleting}
+                  className={`text-[13px] px-4 py-2 transition-all ${
+                    selectedIds.size > 0 && !isDeleting
+                      ? 'text-white bg-red-900/50 hover:bg-red-900/70 border border-red-800'
+                      : 'text-[#555] bg-[#222] cursor-not-allowed border border-[#222]'
+                  }`}
+                >
+                  {isDeleting ? 'Deleting...' : `Delete ${selectedIds.size > 0 ? `(${selectedIds.size})` : ''}`}
+                </button>
+                <button
+                  onClick={handleCompare}
+                  disabled={selectedIds.size < 2}
+                  className={`text-[13px] px-4 py-2 transition-all ${
+                    selectedIds.size >= 2
+                      ? 'text-black bg-white hover:bg-[#e0e0e0]'
+                      : 'text-[#555] bg-[#222] cursor-not-allowed'
+                  }`}
+                >
+                  Compare {selectedIds.size > 0 && `(${selectedIds.size})`}
+                </button>
+              </>
             )}
             
             <Link
@@ -322,12 +370,12 @@ export default function Dashboard() {
         </div>
         
         {/* Selection Info */}
-        {compareMode && (
+        {selectionMode && (
           <div className="mb-4 py-3 px-4 bg-[#111] border border-[#1a1a1a] text-[13px] text-[#888]">
             {selectedIds.size === 0 
-              ? 'Select at least 2 runs to compare'
+              ? 'Click runs to select them for comparison or deletion'
               : selectedIds.size === 1
-              ? 'Select 1 more run to compare'
+              ? '1 run selected'
               : `${selectedIds.size} runs selected`
             }
           </div>
@@ -336,7 +384,7 @@ export default function Dashboard() {
         <RunTable 
           runs={runs} 
           loading={loading}
-          selectable={compareMode}
+          selectable={selectionMode}
           selectedIds={selectedIds}
           onSelectionChange={setSelectedIds}
         />

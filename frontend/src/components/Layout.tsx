@@ -21,7 +21,7 @@ export default function Layout({ children }: LayoutProps) {
         <div className="max-w-6xl mx-auto px-8 py-6">
           <div className="flex items-center justify-between">
             <Link to="/" className="text-white text-lg tracking-tight">
-              OpenBench
+              OpenBench Studio
             </Link>
 
             <div className="flex items-center gap-8">

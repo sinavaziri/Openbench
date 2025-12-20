@@ -78,12 +78,6 @@ class RunExecutor:
         
         self._write_command(artifact_dir, cmd)
         
-        # Write list of env var names used (but never the values!)
-        if api_keys:
-            env_keys_used_path = artifact_dir / "env_keys_used.json"
-            with open(env_keys_used_path, "w") as f:
-                json.dump(list(api_keys.keys()), f, indent=2)
-        
         # Update run status to running
         await run_store.update_run(
             run.run_id,
@@ -136,14 +130,72 @@ class RunExecutor:
                     return
                 
                 # Update run with results
-                if exit_code == 0:
+                # Read stdout and stderr to detect failures
+                with open(stdout_path, "r") as f:
+                    stdout_content = f.read()
+                with open(stderr_path, "r") as f:
+                    stderr_content = f.read()
+                
+                # Detect benchmark failures even if exit code is 0
+                # The bench CLI sometimes returns 0 even when tasks fail
+                failure_patterns = [
+                    "Task interrupted (no samples completed",
+                    "Error code:",
+                    "NotFoundError:",
+                    "does not exist or you do not have access",
+                    "model_not_found",
+                    "AuthenticationError:",
+                    "PermissionDeniedError:",
+                    "RateLimitError:",
+                ]
+                
+                detected_failure = False
+                error = None
+                for pattern in failure_patterns:
+                    if pattern in stdout_content or pattern in stderr_content:
+                        detected_failure = True
+                        # Extract error message from stdout (bench CLI outputs errors to stdout)
+                        content = stdout_content if pattern in stdout_content else stderr_content
+                        
+                        # Look for specific error messages at the end of output
+                        lines = content.split('\n')
+                        
+                        # Find the actual error message (usually after the traceback)
+                        error_msg_lines = []
+                        found_error_type = False
+                        for i, line in enumerate(lines):
+                            # Look for the actual error type and message (e.g., "NotFoundError: Error code: 404")
+                            if any(err_type in line for err_type in ['Error:', 'Error code:', 'interrupted']):
+                                # This is likely the actual error message
+                                found_error_type = True
+                                # Get this line and a few after it
+                                for j in range(i, min(i + 5, len(lines))):
+                                    clean_line = lines[j].strip()
+                                    # Skip box drawing characters and empty lines
+                                    if clean_line and not all(c in '─│╭╮╯╰├┤┬┴┼═╔╗╚╝╠╣╦╩╬' for c in clean_line):
+                                        error_msg_lines.append(clean_line)
+                                break
+                        
+                        if error_msg_lines:
+                            error = '\n'.join(error_msg_lines[:5])  # First 5 meaningful lines
+                        elif found_error_type:
+                            # If we found error type but no clean lines, use a generic message
+                            error = f"Benchmark failed with {pattern}"
+                        
+                        if not error:
+                            # Fallback: get last 500 chars
+                            error = content[-500:].strip()
+                        break
+                
+                if exit_code == 0 and not detected_failure:
                     status = RunStatus.COMPLETED
                     error = None
+                elif exit_code == 0 and detected_failure:
+                    status = RunStatus.FAILED
+                    error = error or "Benchmark failed but returned exit code 0"
                 else:
                     status = RunStatus.FAILED
-                    # Read stderr for error message
-                    with open(stderr_path, "r") as f:
-                        error = f.read()[-1000:]  # Last 1000 chars
+                    error = error or stderr_content[-1000:] if stderr_content else f"Process exited with code {exit_code}"
                 
                 # Parse and write summary.json
                 primary_metric_value: Optional[float] = None

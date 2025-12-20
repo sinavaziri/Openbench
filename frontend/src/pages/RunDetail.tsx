@@ -6,6 +6,7 @@ import Layout from '../components/Layout';
 import LogTail from '../components/LogTail';
 import MetricCards from '../components/MetricCards';
 import BreakdownChart from '../components/BreakdownChart';
+import ArtifactViewer from '../components/ArtifactViewer';
 
 export default function RunDetail() {
   const { id } = useParams<{ id: string }>();
@@ -29,6 +30,9 @@ export default function RunDetail() {
   const [editingTags, setEditingTags] = useState(false);
   const [newTag, setNewTag] = useState('');
   const [savingTags, setSavingTags] = useState(false);
+  
+  // Artifact preview
+  const [previewArtifact, setPreviewArtifact] = useState<string | null>(null);
   
   // Refs to track SSE subscription
   const sseCleanup = useRef<(() => void) | null>(null);
@@ -608,17 +612,170 @@ export default function RunDetail() {
       {/* Artifacts */}
       {run.artifacts && run.artifacts.length > 0 && (
         <div className="mt-12">
-          <p className="text-[11px] text-[#666] uppercase tracking-[0.1em] mb-4">
-            Artifacts
-          </p>
-          <div className="space-y-2">
-            {run.artifacts.map((artifact) => (
-              <div key={artifact} className="text-[14px] text-[#888] font-mono">
-                {artifact}
-              </div>
-            ))}
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-[11px] text-[#666] uppercase tracking-[0.1em]">
+              Artifacts ({run.artifacts.length})
+            </p>
+            {run.artifacts.length > 1 && (
+              <button
+                onClick={() => {
+                  // Download all artifacts by opening each in a new tab
+                  run.artifacts.forEach((artifact) => {
+                    const link = document.createElement('a');
+                    link.href = `/api/runs/${id}/artifacts/${artifact}`;
+                    link.download = artifact;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                  });
+                }}
+                className="px-3 py-1.5 text-[11px] text-[#888] border border-[#222] hover:border-[#444] hover:text-white transition-colors flex items-center gap-2"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                Download All
+              </button>
+            )}
           </div>
+          
+          {/* Separate regular artifacts from detailed logs */}
+          {(() => {
+            const regularArtifacts = run.artifacts.filter(a => !a.startsWith('logs/'));
+            const detailedLogs = run.artifacts.filter(a => a.startsWith('logs/'));
+            
+            return (
+              <>
+                {/* Regular artifacts */}
+                {regularArtifacts.length > 0 && (
+                  <div className="space-y-2 mb-6">
+                    {regularArtifacts.map((artifact) => (
+                      <div
+                        key={artifact}
+                        className="flex items-center justify-between gap-3 px-4 py-2.5 bg-[#0a0a0a] border border-[#1a1a1a] hover:border-[#333] hover:bg-[#111] transition-all group"
+                      >
+                        <button
+                          onClick={() => setPreviewArtifact(artifact)}
+                          className="flex items-center gap-3 flex-1 min-w-0 text-left"
+                        >
+                          <svg className="w-4 h-4 text-[#666] group-hover:text-[#888] flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                          <span className="text-[14px] text-[#888] group-hover:text-white font-mono transition-colors truncate">
+                            {artifact}
+                          </span>
+                        </button>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const link = document.createElement('a');
+                              link.href = `/api/runs/${id}/artifacts/${artifact}`;
+                              link.download = artifact;
+                              document.body.appendChild(link);
+                              link.click();
+                              document.body.removeChild(link);
+                            }}
+                            className="p-1.5 text-[#555] hover:text-[#888] transition-colors"
+                            title="Download"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                
+                {/* Detailed evaluation logs */}
+                {detailedLogs.length > 0 && (
+                  <div className="mt-6">
+                    <p className="text-[11px] text-[#555] uppercase tracking-[0.1em] mb-3">
+                      Detailed Logs
+                    </p>
+                    <div className="space-y-2">
+                      {detailedLogs.map((artifact) => {
+                        const isEvalFile = artifact.endsWith('.eval');
+                        
+                        if (isEvalFile) {
+                          return (
+                            <Link
+                              key={artifact}
+                              to={`/runs/${id}/eval/${artifact}`}
+                              className="flex items-center gap-3 px-4 py-2 bg-[#0a0a0a] border border-[#1a1a1a] hover:border-[#333] transition-colors group"
+                            >
+                              <svg className="w-4 h-4 text-[#666] group-hover:text-[#888]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                              </svg>
+                              <span className="text-[14px] text-[#888] group-hover:text-white font-mono transition-colors flex-1">
+                                {artifact.replace('logs/', '')}
+                              </span>
+                              <span className="text-[11px] text-[#555] group-hover:text-[#666]">
+                                View Results →
+                              </span>
+                            </Link>
+                          );
+                        }
+                        
+                        return (
+                          <div
+                            key={artifact}
+                            className="flex items-center justify-between gap-3 px-4 py-2.5 bg-[#0a0a0a] border border-[#1a1a1a] hover:border-[#333] hover:bg-[#111] transition-all group"
+                          >
+                            <button
+                              onClick={() => setPreviewArtifact(artifact)}
+                              className="flex items-center gap-3 flex-1 min-w-0 text-left"
+                            >
+                              <svg className="w-4 h-4 text-[#666] group-hover:text-[#888] flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                              </svg>
+                              <span className="text-[14px] text-[#888] group-hover:text-white font-mono transition-colors truncate">
+                                {artifact.replace('logs/', '')}
+                              </span>
+                            </button>
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const link = document.createElement('a');
+                                  link.href = `/api/runs/${id}/artifacts/${artifact}`;
+                                  link.download = artifact.replace('logs/', '');
+                                  document.body.appendChild(link);
+                                  link.click();
+                                  document.body.removeChild(link);
+                                }}
+                                className="p-1.5 text-[#555] hover:text-[#888] transition-colors"
+                                title="Download"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                </svg>
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <p className="text-[12px] text-[#555] mt-3">
+                      💡 Tip: Click .eval files to view detailed results in the browser
+                    </p>
+                  </div>
+                )}
+              </>
+            );
+          })()}
         </div>
+      )}
+
+      {/* Artifact Preview Modal */}
+      {previewArtifact && id && (
+        <ArtifactViewer
+          runId={id}
+          artifact={previewArtifact}
+          onClose={() => setPreviewArtifact(null)}
+        />
       )}
     </Layout>
   );

@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import AsyncGenerator, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 
 from app.core.auth import get_current_user, get_optional_user
 from app.core.config import RUNS_DIR
@@ -148,6 +148,54 @@ async def delete_run(
         raise HTTPException(status_code=400, detail="Failed to delete run")
     
     return {"status": "deleted"}
+
+
+@router.post("/runs/bulk-delete")
+async def bulk_delete_runs(
+    run_ids: list[str],
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Delete multiple runs at once.
+    
+    Returns a summary of successes and failures.
+    Cannot delete runs that are currently running.
+    """
+    results = {
+        "deleted": [],
+        "failed": [],
+        "running": [],
+        "not_found": []
+    }
+    
+    for run_id in run_ids:
+        run = await run_store.get_run(run_id, user_id=current_user.user_id)
+        
+        if run is None:
+            results["not_found"].append(run_id)
+            continue
+        
+        if run.status == RunStatus.RUNNING:
+            results["running"].append(run_id)
+            continue
+        
+        success = await run_store.delete_run(run_id, user_id=current_user.user_id)
+        if success:
+            results["deleted"].append(run_id)
+        else:
+            results["failed"].append(run_id)
+    
+    return {
+        "status": "completed",
+        "summary": {
+            "total": len(run_ids),
+            "deleted": len(results["deleted"]),
+            "failed": len(results["failed"]),
+            "running": len(results["running"]),
+            "not_found": len(results["not_found"])
+        },
+        "details": results
+    }
 
 
 @router.patch("/runs/{run_id}/tags")
@@ -306,4 +354,217 @@ async def stream_run_events(run_id: str, request: Request):
             "X-Accel-Buffering": "no",  # Disable nginx buffering
         },
     )
+
+
+@router.get("/runs/{run_id}/artifacts/{artifact_path:path}")
+async def download_artifact(
+    run_id: str,
+    artifact_path: str,
+    current_user: Optional[User] = Depends(get_optional_user),
+):
+    """
+    Download a specific artifact file from a run.
+    
+    Supports nested paths like 'logs/file.eval'.
+    """
+    user_id = current_user.user_id if current_user else None
+    run = await run_store.get_run(run_id, user_id=user_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    
+    # Build the full path and validate it's within the run directory
+    artifact_dir = RUNS_DIR / run_id
+    file_path = artifact_dir / artifact_path
+    
+    # Security check: ensure the path doesn't escape the run directory
+    try:
+        file_path = file_path.resolve()
+        artifact_dir = artifact_dir.resolve()
+        if not str(file_path).startswith(str(artifact_dir)):
+            raise HTTPException(status_code=403, detail="Access denied")
+    except Exception:
+        raise HTTPException(status_code=403, detail="Invalid path")
+    
+    if not file_path.exists() or not file_path.is_file():
+        raise HTTPException(status_code=404, detail="Artifact not found")
+    
+    # Determine media type based on file extension
+    media_type = "application/octet-stream"
+    if artifact_path.endswith('.json'):
+        media_type = "application/json"
+    elif artifact_path.endswith('.txt'):
+        media_type = "text/plain"
+    elif artifact_path.endswith('.log'):
+        media_type = "text/plain"
+    
+    return FileResponse(
+        path=str(file_path),
+        media_type=media_type,
+        filename=file_path.name,
+    )
+
+
+@router.get("/runs/{run_id}/eval-data/{eval_path:path}")
+async def get_eval_data(
+    run_id: str,
+    eval_path: str,
+    current_user: Optional[User] = Depends(get_optional_user),
+):
+    """
+    Parse and return structured data from an .eval file for viewing in the UI.
+    
+    Returns JSON with evaluation results, metrics, and sample details.
+    """
+    user_id = current_user.user_id if current_user else None
+    run = await run_store.get_run(run_id, user_id=user_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    
+    # Build the full path and validate
+    artifact_dir = RUNS_DIR / run_id
+    file_path = artifact_dir / eval_path
+    
+    # Security check
+    try:
+        file_path = file_path.resolve()
+        artifact_dir = artifact_dir.resolve()
+        if not str(file_path).startswith(str(artifact_dir)):
+            raise HTTPException(status_code=403, detail="Access denied")
+    except Exception:
+        raise HTTPException(status_code=403, detail="Invalid path")
+    
+    if not file_path.exists() or not file_path.is_file():
+        raise HTTPException(status_code=404, detail="Eval file not found")
+    
+    # Only allow .eval files
+    if not file_path.suffix == '.eval':
+        raise HTTPException(status_code=400, detail="Only .eval files can be parsed")
+    
+    try:
+        # Import inspect_ai to read the eval log
+        from inspect_ai.log import read_eval_log
+        import asyncio
+        
+        # Read the eval log (needs to run in a new event loop to avoid conflicts)
+        def _read_log():
+            return read_eval_log(str(file_path))
+        
+        # Run in executor to avoid event loop conflicts
+        loop = asyncio.get_running_loop()
+        log = await loop.run_in_executor(None, _read_log)
+        
+        # Extract key information
+        result = {
+            "status": log.status if hasattr(log, 'status') else None,
+            "eval_name": log.eval.task if hasattr(log.eval, 'task') else None,
+            "model": log.eval.model if hasattr(log.eval, 'model') else None,
+            "dataset": log.eval.dataset.name if hasattr(log.eval, 'dataset') and log.eval.dataset else None,
+            "created": str(log.eval.created) if hasattr(log.eval, 'created') and log.eval.created else None,
+            "completed": str(log.eval.completed) if hasattr(log.eval, 'completed') and log.eval.completed else None,
+            "total_samples": len(log.samples) if hasattr(log, 'samples') and log.samples else 0,
+            "metrics": {},
+            "samples": [],
+            "config": {
+                "limit": log.eval.config.limit if hasattr(log.eval, 'config') and hasattr(log.eval.config, 'limit') else None,
+                "epochs": log.eval.config.epochs if hasattr(log.eval, 'config') and hasattr(log.eval.config, 'epochs') else None,
+            }
+        }
+        
+        # Extract metrics (scores)
+        if log.results and log.results.scores:
+            for score in log.results.scores:
+                # EvalScore has metrics dictionary, not a direct value
+                if hasattr(score, 'metrics') and score.metrics:
+                    for metric_name, metric_data in score.metrics.items():
+                        # metric_data is an EvalMetric object
+                        result["metrics"][metric_name] = {
+                            "value": float(metric_data.value) if metric_data.value is not None else None,
+                            "name": metric_data.name if hasattr(metric_data, 'name') else metric_name,
+                            "reducer": score.reducer if hasattr(score, 'reducer') else None,
+                        }
+        
+        # Extract sample information (limit to first 100 for performance)
+        if log.samples:
+            for i, sample in enumerate(log.samples[:100]):
+                sample_data = {
+                    "id": sample.id if hasattr(sample, 'id') else i,
+                    "epoch": sample.epoch if hasattr(sample, 'epoch') else 1,
+                    "input": str(sample.input)[:500] if sample.input else None,  # Truncate long inputs
+                    "target": str(sample.target)[:500] if sample.target else None,
+                    "output": None,
+                    "score": None,
+                    "error": sample.error if hasattr(sample, 'error') and sample.error else None,
+                }
+                
+                # Extract output from the last message
+                if sample.messages and len(sample.messages) > 0:
+                    last_msg = sample.messages[-1]
+                    if hasattr(last_msg, 'content'):
+                        sample_data["output"] = str(last_msg.content)[:500]  # Truncate
+                
+                # Extract score
+                if sample.scores:
+                    print(f"DEBUG: sample.scores type: {type(sample.scores)}")
+                    print(f"DEBUG: sample.scores: {sample.scores}")
+                    # sample.scores is a dictionary of scorer_name -> score_data
+                    if isinstance(sample.scores, dict):
+                        # Get the first score from the dictionary
+                        score_name, score_data = next(iter(sample.scores.items()))
+                        print(f"DEBUG: score_name: {score_name}, score_data: {score_data}, score_data type: {type(score_data)}")
+                        if isinstance(score_data, dict):
+                            # Try to convert value to float, handle cases where it's a string
+                            score_value = None
+                            try:
+                                if score_data.get('value') is not None:
+                                    score_value = float(score_data['value'])
+                            except (ValueError, TypeError) as e:
+                                print(f"DEBUG: Failed to convert score value to float: {e}")
+                                # If value is not numeric (e.g., "C"), compute correctness score
+                                # by comparing answer to target (1.0 if match, 0.0 if not)
+                                if 'answer' in score_data and sample.target:
+                                    score_value = 1.0 if str(score_data['answer']) == str(sample.target) else 0.0
+                                    print(f"DEBUG: Computed score from answer: {score_value}")
+                            
+                            sample_data["score"] = {
+                                "value": score_value,
+                                "name": score_name,
+                                "explanation": score_data.get('explanation'),
+                            }
+                        else:
+                            print(f"DEBUG: score_data is not a dict, it has attributes: {dir(score_data)}")
+                    elif hasattr(sample.scores, 'value'):
+                        # Fallback for older formats
+                        score_value = None
+                        try:
+                            if sample.scores.value is not None:
+                                score_value = float(sample.scores.value)
+                        except (ValueError, TypeError):
+                            # If value is not numeric, try to compute from answer/target
+                            if hasattr(sample.scores, 'answer') and sample.target:
+                                score_value = 1.0 if str(sample.scores.answer) == str(sample.target) else 0.0
+                        
+                        sample_data["score"] = {
+                            "value": score_value,
+                            "name": sample.scores.name if hasattr(sample.scores, 'name') else "score",
+                            "explanation": sample.scores.explanation if hasattr(sample.scores, 'explanation') else None,
+                        }
+                
+                result["samples"].append(sample_data)
+        
+        return result
+        
+    except ImportError as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500, 
+            detail=f"inspect_ai not available: {str(e)}"
+        )
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to parse eval file: {str(e)}"
+        )
 

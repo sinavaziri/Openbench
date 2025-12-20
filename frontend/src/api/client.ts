@@ -410,6 +410,28 @@ class ApiClient {
     }, true);  // Requires auth
   }
 
+  async bulkDeleteRuns(runIds: string[]): Promise<{
+    status: string;
+    summary: {
+      total: number;
+      deleted: number;
+      failed: number;
+      running: number;
+      not_found: number;
+    };
+    details: {
+      deleted: string[];
+      failed: string[];
+      running: string[];
+      not_found: string[];
+    };
+  }> {
+    return this.request('/runs/bulk-delete', {
+      method: 'POST',
+      body: JSON.stringify(runIds),
+    }, true);  // Requires auth
+  }
+
   async updateRunTags(runId: string, tags: string[]): Promise<{ tags: string[] }> {
     return this.request(`/runs/${runId}/tags`, {
       method: 'PATCH',

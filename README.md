@@ -47,7 +47,26 @@ Run data is persisted in the `./data` directory:
 - `data/openbench.db` - SQLite database (users, runs metadata)
 - `data/runs/` - Run artifacts (configs, logs, results)
 
-## Local Development
+## Development Mode (Hot Reload)
+
+For active development with automatic code reloading:
+
+```bash
+# Start development environment with hot reload
+./dev.sh build  # First time or when dependencies change
+./dev.sh        # Subsequent starts
+
+# View logs
+./dev.sh logs frontend  # Frontend only
+./dev.sh logs backend   # Backend only
+
+# Stop
+./dev.sh down
+```
+
+See [DEVELOPMENT.md](DEVELOPMENT.md) for detailed development setup instructions.
+
+## Local Development (Without Docker)
 
 ### Backend
 

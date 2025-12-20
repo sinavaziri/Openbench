@@ -41,11 +41,28 @@ def read_command(run_id: str) -> Optional[str]:
 
 
 def list_artifacts(run_id: str) -> list[str]:
-    """List all artifact files for a run."""
+    """
+    List all artifact files for a run, including files in subdirectories.
+    Returns relative paths from the run directory (e.g., 'logs/file.eval').
+    """
     artifact_dir = RUNS_DIR / run_id
     if not artifact_dir.exists():
         return []
-    return [f.name for f in artifact_dir.iterdir() if f.is_file()]
+    
+    artifacts = []
+    # Add files in the root directory
+    for item in artifact_dir.iterdir():
+        if item.is_file():
+            artifacts.append(item.name)
+        elif item.is_dir():
+            # Add files in subdirectories with relative paths
+            for subfile in item.rglob('*'):
+                if subfile.is_file():
+                    # Get path relative to artifact_dir
+                    rel_path = subfile.relative_to(artifact_dir)
+                    artifacts.append(str(rel_path))
+    
+    return sorted(artifacts)
 
 
 def read_summary(run_id: str) -> Optional[dict[str, Any]]:
